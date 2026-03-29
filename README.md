@@ -1,46 +1,41 @@
 # n8n-nodes-terabox
 
-This is an n8n community node. It lets you use _app/service name_ in your n8n workflows.
+TeraBox community node for n8n.
 
-_App/service name_ is _one or two sentences describing the service this node integrates with_.
-
-[n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
-
-[Installation](#installation)
-[Operations](#operations)
-[Credentials](#credentials)
-[Compatibility](#compatibility)
-[Usage](#usage)
-[Resources](#resources)
-[Version history](#version-history)
+This package now uses a real logged-in TeraBox session instead of the public OAuth/OpenAPI flow, because TeraBox does not provide a reliable general-purpose client ID / client secret flow for normal users.
 
 ## Installation
 
-Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n community nodes documentation.
-
-## Operations
-
-_List the operations supported by your node._
+Follow the standard [n8n community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/).
 
 ## Credentials
 
-_If users need to authenticate with the app/service, provide details here. You should include prerequisites (such as signing up with the service), available authentication methods, and how to set them up._
+This package uses a manual, session-based authentication method:
 
-## Compatibility
+- `Manual Session`: paste a browser cookie header plus `jsToken` from an authenticated TeraBox/Nephobox web request.
+- `QR Login Assistant`: use `Authentication -> Start QR Login`, scan the QR code in the TeraBox app, then keep calling `Authentication -> Check QR Login` until it returns `cookieHeader`, `ndus`, and `jsToken`.
 
-_State the minimum n8n version, as well as which versions you test against. You can also include any known version incompatibility issues._
+## Recommended Setup
 
-## Usage
+1. In n8n, add the `TeraBox Session API` credential.
+2. Either paste `Cookie Header` and `JS Token` manually, or generate them with the QR Login Assistant operations.
+3. Run `Authentication -> Validate Session`.
 
-_This is an optional section. Use it to help users with any difficult or confusing aspects of the node._
+## Supported Operations
 
-_By the time users are looking for community nodes, they probably already know n8n basics. But if you expect new users, you can link to the [Try it out](https://docs.n8n.io/try-it-out/) documentation to help them get started._
+Currently verified and wired for the session-based flow:
 
-## Resources
+- Authentication: `Start QR Login`, `Check QR Login`, `Validate Session`, `Session Diagnostics`
+- User: `Get Info`, `Get Quota`
+- File: `List`, `Search`, `Get Metadata`, `Delete`, `Copy`, `Move`, `Rename`
 
-* [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
-* _Link to app/service documentation._
+Partially migrated or not yet available:
 
-## Version history
+- File: `Download`, `Upload`
+- Share: `Download Share File`
 
-_This is another optional section. If your node has multiple versions, include a short description of available versions and what changed, as well as any compatibility impact._
+## Notes
+
+- This package is configured for self-hosted/local n8n use, not n8n Cloud verification.
+- You must keep the pasted session values up to date. If TeraBox logs you out, refresh the cookie header / jsToken and retry.
+- The QR Login Assistant uses TeraBox's current web QR flow. It is helpful, but still depends on undocumented web behavior and may break if TeraBox changes the login page.

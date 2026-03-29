@@ -24,12 +24,12 @@ export const shareDescription: INodeProperties[] = [
                 description: 'Copies a file from a shared link directly to your own Terabox account',
                 action: 'Copy share file',
             },
-            {
-                name: 'Download Share File',
-                value: 'download',
-                description: 'Downloads a file directly from a shared link without copying it to your account',
-                action: 'Download share file',
-            },
+			{
+				name: 'Download Share File',
+				value: 'download',
+				description: 'Not available yet in the session-auth version',
+				action: 'Download share file',
+			},
             {
                 name: 'List Share Files',
                 value: 'list',

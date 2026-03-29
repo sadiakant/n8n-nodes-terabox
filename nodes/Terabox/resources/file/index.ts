@@ -24,12 +24,12 @@ export const fileDescription: INodeProperties[] = [
                 description: 'Delete a file or folder',
                 action: 'Delete a file',
             },
-            {
-                name: 'Download',
-                value: 'download',
-                description: 'Download a file',
-                action: 'Download a file',
-            },
+			{
+				name: 'Download',
+				value: 'download',
+				description: 'Not available yet in the session-auth version',
+				action: 'Download a file',
+			},
             {
                 name: 'Get Metadata',
                 value: 'getMetadata',
@@ -60,12 +60,12 @@ export const fileDescription: INodeProperties[] = [
                 description: 'Search files by name',
                 action: 'Search files',
             },
-            {
-                name: 'Upload',
-                value: 'upload',
-                description: 'Upload a file using the sharded upload process',
-                action: 'Upload a file',
-            },
+			{
+				name: 'Upload',
+				value: 'upload',
+				description: 'Not available yet in the session-auth version',
+				action: 'Upload a file',
+			},
         ],
         default: 'list',
     },

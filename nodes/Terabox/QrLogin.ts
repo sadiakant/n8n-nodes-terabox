@@ -1,0 +1,862 @@
+import http from 'http';
+import https from 'https';
+import zlib from 'zlib';
+import type { IncomingHttpHeaders } from 'http';
+import { IDataObject } from 'n8n-workflow';
+
+const QR_LOGIN_DEFAULT_PAGE_URL = 'https://www.1024terabox.com/ai/index';
+const QR_LOGIN_DEFAULT_LANG = 'en';
+const QR_LOGIN_DEFAULT_REG_SOURCE = 'web';
+const QR_LOGIN_TIMEOUT_MS = 35000;
+const QR_LOGIN_MAX_REDIRECTS = 5;
+const QR_LOGIN_MAX_RETRIES = 2;
+const QR_LOGIN_PENDING_CODE = 39;
+const QR_LOGIN_STEP_SCANNED = 0;
+const QR_LOGIN_STEP_CONFIRMED = 1;
+const DEFAULT_USER_AGENT =
+	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
+
+type CookieJar = Record<string, string>;
+
+type RequestMethod = 'GET' | 'POST';
+
+type HttpRequestConfig = {
+	body?: string;
+	headers?: Record<string, string>;
+	jar?: CookieJar;
+	maxRedirects?: number;
+	method?: RequestMethod;
+	timeoutMs?: number;
+	url: string;
+};
+
+type HttpResponse = {
+	bodyText: string;
+	finalUrl: string;
+	headers: IncomingHttpHeaders;
+	statusCode: number;
+};
+
+type QrApiResponse<T> = {
+	code?: number | string;
+	data?: T;
+	errno?: number | string;
+	logid?: number | string;
+	msg?: string;
+	show_msg?: string;
+	v?: string;
+};
+
+type QrCodeStartPayload = {
+	qrcode?: string;
+	seq?: number | string;
+	uuid?: string;
+};
+
+type QrCodeCheckPayload = {
+	avatar_url?: string;
+	ndus?: string;
+	region_domain_prefix?: string;
+	reg_country?: string;
+	uname?: string;
+	url_domain_prefix?: string;
+	userid?: number | string;
+	v?: string;
+	step?: number;
+};
+
+type ExtractedPageTokens = {
+	bdstoken?: string;
+	jsToken?: string;
+	pcfToken?: string;
+};
+
+export type QrLoginState = {
+	browserId: string;
+	cookies: CookieJar;
+	lang: string;
+	loginOrigin: string;
+	loginPageUrl: string;
+	pcfToken: string;
+	regSource: string;
+	scannedDisplayName?: string;
+	scannedHeadUrl?: string;
+	seq: number;
+	step: number;
+	uuid: string;
+	vCode?: string;
+};
+
+type StartQrLoginOptions = {
+	lang?: string;
+	loginPageUrl?: string;
+	regSource?: string;
+};
+
+export async function startQrLogin(
+	options: StartQrLoginOptions = {},
+): Promise<IDataObject> {
+	const initialLoginPageUrl = normalizeQrLoginPageUrl(options.loginPageUrl);
+	const lang = normalizeNonEmptyString(options.lang) ?? QR_LOGIN_DEFAULT_LANG;
+	const regSource = normalizeNonEmptyString(options.regSource) ?? QR_LOGIN_DEFAULT_REG_SOURCE;
+	const cookieJar: CookieJar = {};
+
+	const loginPageResponse = await httpRequest({
+		headers: {
+			Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+			'Accept-Language': buildAcceptLanguage(lang),
+		},
+		jar: cookieJar,
+		method: 'GET',
+		url: initialLoginPageUrl,
+	});
+	const loginPageUrl = loginPageResponse.finalUrl;
+	const loginOrigin = new URL(loginPageUrl).origin;
+
+	const tokens = extractPageTokens(loginPageResponse.bodyText);
+	const browserId = normalizeNonEmptyString(cookieJar.browserid);
+
+	if (!browserId) {
+		throw new Error('QR login could not start because the TeraBox browserid cookie was not set.');
+	}
+
+	if (!tokens.pcfToken) {
+		throw new Error('QR login could not start because the TeraBox pcftoken could not be extracted.');
+	}
+
+	const startResponse = await postQrApi<QrCodeStartPayload>({
+		body: buildQrRequestBody({
+			browserid: browserId,
+			client: 'web',
+			clientfrom: 'h5',
+			lang,
+			pass_version: '3.0',
+			pcftoken: tokens.pcfToken,
+		}),
+		jar: cookieJar,
+		lang,
+		loginOrigin,
+		loginPageUrl,
+		pathname: '/passport/qrcode/get',
+	});
+
+	const qrCodePayload = unwrapQrApiPayload(startResponse);
+	const uuid = normalizeNonEmptyString(qrCodePayload.uuid);
+	const qrcode = normalizeNonEmptyString(qrCodePayload.qrcode);
+	const seq = normalizeNumber(qrCodePayload.seq);
+
+	if (!uuid || !qrcode || seq === undefined) {
+		throw new Error('QR login start response was missing one of: qrcode, uuid, or seq.');
+	}
+
+	const state: QrLoginState = {
+		browserId,
+		cookies: { ...cookieJar },
+		lang,
+		loginOrigin,
+		loginPageUrl,
+		pcfToken: tokens.pcfToken,
+		regSource,
+		seq,
+		step: QR_LOGIN_STEP_SCANNED,
+		uuid,
+	};
+
+	return {
+		browserId,
+		cookieHeader: buildCookieHeader(cookieJar),
+		cookieNames: Object.keys(cookieJar).sort(),
+		loginOrigin,
+		loginPageUrl,
+		loginState: state,
+		loginStateJson: JSON.stringify(state),
+		ok: true,
+		pcfToken: tokens.pcfToken,
+		qrCodeDataUrl: qrcode,
+		qrCodePngBase64: extractDataUrlPayload(qrcode),
+		seq,
+		status: 'pending_scan',
+		step: state.step,
+		uuid,
+	};
+}
+
+export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
+	const state = parseQrLoginState(rawState);
+	const cookieJar: CookieJar = { ...state.cookies };
+	// Use nextSeq for the request but don't strictly increment in state if it causes issues,
+	// though incrementing is standard for polling sequence numbers.
+	const nextSeq = state.seq + 1;
+
+	const requestParams: Record<string, string | number> = {
+		browserid: state.browserId,
+		client: 'web',
+		clientfrom: 'h5',
+		lang: state.lang,
+		pass_version: '3.0',
+		pcftoken: state.pcfToken,
+		reg_source: state.regSource,
+		seq: nextSeq,
+		step: state.step,
+		uuid: state.uuid,
+	};
+
+	if (state.vCode) {
+		requestParams.v = state.vCode;
+	}
+
+	const checkResponse = await postQrApi<QrCodeCheckPayload>({
+		body: buildQrRequestBody(requestParams),
+		jar: cookieJar,
+		lang: state.lang,
+		loginOrigin: state.loginOrigin,
+		loginPageUrl: state.loginPageUrl,
+		pathname: '/passport/qrcode/login',
+	});
+
+	state.cookies = { ...cookieJar };
+	state.seq = nextSeq;
+
+	const responseCode = normalizeNumber(checkResponse.code ?? checkResponse.errno) ?? -1;
+	const responseMessage =
+		normalizeNonEmptyString(checkResponse.msg) ??
+		normalizeNonEmptyString(checkResponse.show_msg) ??
+		'';
+
+	if (responseCode === QR_LOGIN_PENDING_CODE) {
+		return buildPendingQrResponse(state, responseMessage);
+	}
+
+	if (responseCode !== 0) {
+		throw new Error(
+			`QR login check failed with code ${responseCode}: ${responseMessage || 'Unknown error'}`,
+		);
+	}
+
+	const payload = unwrapQrApiPayload(checkResponse);
+	const vCode = normalizeNonEmptyString(checkResponse.v) ?? normalizeNonEmptyString(payload.v);
+	if (vCode) {
+		state.vCode = vCode;
+	}
+
+	const responseNdus = normalizeNonEmptyString(payload.ndus) ?? normalizeNonEmptyString(cookieJar.ndus);
+	const isCurrentlyScanned = state.step === QR_LOGIN_STEP_SCANNED;
+
+	// If we have ndus, we are confirmed regardless of what the internal step was
+	if (responseNdus || payload.userid) {
+		const finalSession = await finalizeQrLoginSession(state, payload);
+		return {
+			...finalSession,
+			loginState: state,
+			loginStateJson: JSON.stringify(state),
+			ok: true,
+			seq: state.seq,
+			status: 'success',
+			step: state.step,
+			uuid: state.uuid,
+		};
+	}
+
+	if (isCurrentlyScanned) {
+		state.scannedDisplayName = normalizeNonEmptyString(payload.uname) ?? state.scannedDisplayName;
+		state.scannedHeadUrl = normalizeNonEmptyString(payload.avatar_url) ?? state.scannedHeadUrl;
+		state.step = QR_LOGIN_STEP_CONFIRMED;
+
+		return {
+			avatarUrl: state.scannedHeadUrl ?? '',
+			cookieHeader: buildCookieHeader(cookieJar),
+			cookieNames: Object.keys(cookieJar).sort(),
+			displayName: state.scannedDisplayName ?? '',
+			loginState: state,
+			loginStateJson: JSON.stringify(state),
+			message:
+				'QR code scanned. Confirm login in the TeraBox mobile app, then run Check QR Login again.',
+			ok: true,
+			seq: state.seq,
+			status: 'pending_confirm',
+			step: state.step,
+			uuid: state.uuid,
+			vCode: state.vCode,
+		};
+	}
+
+	// If we are here, it means code was 0 but we don't have confirmation yet or user info
+	return buildPendingQrResponse(state, responseMessage);
+}
+
+function buildAcceptLanguage(lang: string): string {
+	if (!lang.trim()) {
+		return 'en-US,en;q=0.9';
+	}
+
+	if (lang.toLowerCase() === 'en') {
+		return 'en-US,en;q=0.9';
+	}
+
+	return `${lang},en;q=0.9`;
+}
+
+function buildCookieHeader(cookies: CookieJar): string {
+	return Object.entries(cookies)
+		.filter(([, value]) => value !== '')
+		.map(([name, value]) => `${name}=${value}`)
+		.join('; ');
+}
+
+function buildPendingQrResponse(state: QrLoginState, message?: string): IDataObject {
+	return {
+		avatarUrl: state.scannedHeadUrl ?? '',
+		cookieHeader: buildCookieHeader(state.cookies),
+		cookieNames: Object.keys(state.cookies).sort(),
+		displayName: state.scannedDisplayName ?? '',
+		loginState: state,
+		loginStateJson: JSON.stringify(state),
+		message: message || getPendingMessage(state.step),
+		ok: true,
+		seq: state.seq,
+		status: state.step === QR_LOGIN_STEP_CONFIRMED ? 'pending_confirm' : 'pending_scan',
+		step: state.step,
+		uuid: state.uuid,
+	};
+}
+
+function buildQrRequestBody(body: Record<string, string | number>): string {
+	const params = new URLSearchParams();
+
+	for (const [key, value] of Object.entries(body)) {
+		params.set(key, String(value));
+	}
+
+	return params.toString();
+}
+
+function decompressResponseBody(body: Buffer, encoding: string | undefined): Buffer {
+	switch ((encoding ?? '').toLowerCase()) {
+		case 'br':
+			return zlib.brotliDecompressSync(body);
+		case 'deflate':
+			return zlib.inflateSync(body);
+		case 'gzip':
+			return zlib.gunzipSync(body);
+		default:
+			return body;
+	}
+}
+
+function extractDataUrlPayload(dataUrl: string): string {
+	const [, payload = ''] = dataUrl.split(',', 2);
+	return payload;
+}
+
+function extractPageTokens(html: string): ExtractedPageTokens {
+	return {
+		bdstoken: extractFirstMatch(html, [
+			/"bdstoken":"([^"]+)"/,
+			/bdstoken=([A-Fa-f0-9]{16,128})/,
+		]),
+		jsToken: extractFirstMatch(html, [
+			/fn%28%22([A-Fa-f0-9]{32,512})%22%29/,
+			/fn\("([A-Fa-f0-9]{32,512})"\)/,
+			/"jsToken":"([A-Fa-f0-9]{32,512})"/,
+		]),
+		pcfToken: extractFirstMatch(html, [/"pcftoken":"([^"]+)"/]),
+	};
+}
+
+function extractFirstMatch(content: string, expressions: RegExp[]): string | undefined {
+	for (const expression of expressions) {
+		const match = content.match(expression);
+		if (match?.[1]) {
+			return match[1];
+		}
+	}
+
+	return undefined;
+}
+
+async function fetchSessionLandingPage(
+	state: QrLoginState,
+	jar: CookieJar,
+	payload: QrCodeCheckPayload,
+): Promise<HttpResponse> {
+	const candidateOrigins = buildCandidateLoginOrigins(state, payload);
+	const candidateUrls = candidateOrigins.flatMap((origin) => [
+		`${origin}/main?category=all&path=%2F`,
+		`${origin}/main`,
+		origin,
+	]);
+
+	for (const candidateUrl of candidateUrls) {
+		try {
+			const response = await httpRequest({
+				headers: {
+					Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+					'Accept-Language': buildAcceptLanguage(state.lang),
+				},
+				jar,
+				method: 'GET',
+				url: candidateUrl,
+			});
+			const tokens = extractPageTokens(response.bodyText);
+			if (tokens.jsToken) {
+				return response;
+			}
+		} catch {
+			continue;
+		}
+	}
+
+	throw new Error('QR login succeeded, but a follow-up page request could not extract jsToken.');
+}
+
+async function finalizeQrLoginSession(
+	state: QrLoginState,
+	payload: QrCodeCheckPayload,
+): Promise<IDataObject> {
+	const cookieJar: CookieJar = { ...state.cookies };
+	const responseNdus = normalizeNonEmptyString(payload.ndus);
+	if (responseNdus) {
+		cookieJar.ndus = responseNdus;
+	}
+
+	const landingPageResponse = await fetchSessionLandingPage(state, cookieJar, payload);
+	const landingPageTokens = extractPageTokens(landingPageResponse.bodyText);
+	const finalNdus = normalizeNonEmptyString(cookieJar.ndus) ?? responseNdus;
+
+	if (!finalNdus) {
+		throw new Error('QR login succeeded, but ndus could not be found in the response or cookies.');
+	}
+
+	if (!landingPageTokens.jsToken) {
+		throw new Error('QR login succeeded, but jsToken could not be extracted from the authenticated page.');
+	}
+
+	state.cookies = { ...cookieJar };
+	state.browserId = normalizeNonEmptyString(cookieJar.browserid) ?? state.browserId;
+	state.loginPageUrl = landingPageResponse.finalUrl;
+	state.loginOrigin = new URL(landingPageResponse.finalUrl).origin;
+	state.pcfToken = landingPageTokens.pcfToken ?? state.pcfToken;
+
+	const cookieHeader = buildCookieHeader(cookieJar);
+	const baseUrl = state.loginOrigin;
+	const credentials = {
+		baseUrl,
+		bdstoken: landingPageTokens.bdstoken ?? '',
+		cookieHeader,
+		jsToken: landingPageTokens.jsToken,
+		ndus: finalNdus,
+	};
+
+	return {
+		baseUrl,
+		bdstoken: landingPageTokens.bdstoken ?? '',
+		cookieHeader,
+		cookieNames: Object.keys(cookieJar).sort(),
+		credentials,
+		displayName: state.scannedDisplayName ?? '',
+		jsToken: landingPageTokens.jsToken,
+		loginOrigin: state.loginOrigin,
+		ndus: finalNdus,
+		userId: payload.userid ?? '',
+	};
+}
+
+function buildCandidateLoginOrigins(
+	state: QrLoginState,
+	payload: QrCodeCheckPayload,
+): string[] {
+	const origins = new Set<string>();
+	const preferredPrefixes = [
+		normalizeNonEmptyString(payload.region_domain_prefix),
+		normalizeNonEmptyString(payload.url_domain_prefix),
+	];
+
+	for (const prefix of preferredPrefixes) {
+		const origin = buildOriginWithPrefix(state.loginOrigin, prefix);
+		if (origin) {
+			origins.add(origin);
+		}
+	}
+
+	origins.add(state.loginOrigin);
+
+	return [...origins];
+}
+
+function buildOriginWithPrefix(origin: string, prefix?: string): string | undefined {
+	const normalizedPrefix = normalizeNonEmptyString(prefix);
+	if (!normalizedPrefix) {
+		return undefined;
+	}
+
+	const parsedOrigin = new URL(origin);
+	const hostnameParts = parsedOrigin.hostname.split('.');
+	if (hostnameParts.length < 2) {
+		return undefined;
+	}
+
+	const baseDomain =
+		hostnameParts.length > 2 ? hostnameParts.slice(1).join('.') : parsedOrigin.hostname;
+
+	parsedOrigin.hostname = `${normalizedPrefix}.${baseDomain}`;
+	return parsedOrigin.origin;
+}
+
+function getPendingMessage(step: number): string {
+	return step === QR_LOGIN_STEP_CONFIRMED
+		? 'QR code was scanned. Confirm login in the TeraBox mobile app.'
+		: 'Waiting for the QR code to be scanned in the TeraBox mobile app.';
+}
+
+async function httpRequest(config: HttpRequestConfig): Promise<HttpResponse> {
+	return await httpRequestWithRetry(config, 0);
+}
+
+async function httpRequestWithRetry(
+	config: HttpRequestConfig,
+	attempt: number,
+): Promise<HttpResponse> {
+	const jar = config.jar ?? {};
+	const method = config.method ?? 'GET';
+	const requestUrl = new URL(config.url);
+	const isSecure = requestUrl.protocol === 'https:';
+	const requestBody = config.body ? Buffer.from(config.body, 'utf8') : undefined;
+	const headers: Record<string, string> = {
+		'Accept-Encoding': 'gzip, deflate, br',
+		Connection: 'keep-alive',
+		'User-Agent': DEFAULT_USER_AGENT,
+		...(config.headers ?? {}),
+	};
+
+	const cookieHeader = buildCookieHeader(jar);
+	if (cookieHeader && !headers.Cookie) {
+		headers.Cookie = cookieHeader;
+	}
+
+	if (requestBody && !headers['Content-Length']) {
+		headers['Content-Length'] = String(requestBody.length);
+	}
+
+	if (requestBody && !headers['Content-Type']) {
+		headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+	}
+
+	const transport = isSecure ? https : http;
+
+	try {
+		return await new Promise<HttpResponse>((resolve, reject) => {
+			const request = transport.request(
+				{
+					family: 4,
+					hostname: requestUrl.hostname,
+					headers,
+					host: requestUrl.host,
+					path: `${requestUrl.pathname}${requestUrl.search}`,
+					method,
+					port: requestUrl.port || undefined,
+					protocol: requestUrl.protocol,
+					servername: requestUrl.hostname,
+					timeout: config.timeoutMs ?? QR_LOGIN_TIMEOUT_MS,
+				},
+				(incomingMessage) => {
+					const chunks: Buffer[] = [];
+
+					incomingMessage.on('data', (chunk: Buffer | string) => {
+						chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+					});
+
+					incomingMessage.on('end', () => {
+						try {
+							updateCookieJar(jar, incomingMessage.headers['set-cookie']);
+							const bodyBuffer = Buffer.concat(chunks);
+							const decodedBody = decompressResponseBody(
+								bodyBuffer,
+								normalizeHeaderValue(incomingMessage.headers['content-encoding']),
+							).toString('utf8');
+							const statusCode = incomingMessage.statusCode ?? 0;
+							const location = normalizeHeaderValue(incomingMessage.headers.location);
+
+							if (
+								location &&
+								statusCode >= 300 &&
+								statusCode < 400 &&
+								(config.maxRedirects ?? QR_LOGIN_MAX_REDIRECTS) > 0
+							) {
+								const redirectHeaders = { ...headers };
+								const redirectMethod =
+									statusCode === 303 || ((statusCode === 301 || statusCode === 302) && method === 'POST')
+										? 'GET'
+										: method;
+								delete redirectHeaders.Cookie;
+								if (redirectMethod === 'GET') {
+									delete redirectHeaders['Content-Length'];
+									delete redirectHeaders['Content-Type'];
+								}
+								void httpRequest({
+									headers: redirectHeaders,
+									jar,
+									maxRedirects: (config.maxRedirects ?? QR_LOGIN_MAX_REDIRECTS) - 1,
+									method: redirectMethod,
+									timeoutMs: config.timeoutMs,
+									url: new URL(location, requestUrl).toString(),
+								})
+									.then(resolve)
+									.catch(reject);
+								return;
+							}
+
+							resolve({
+								bodyText: decodedBody,
+								finalUrl: requestUrl.toString(),
+								headers: incomingMessage.headers,
+								statusCode,
+							});
+						} catch (error) {
+							reject(error);
+						}
+					});
+
+					incomingMessage.on('error', reject);
+				},
+			);
+
+			request.on('timeout', () => {
+				request.destroy(new Error(`Request timed out after ${config.timeoutMs ?? QR_LOGIN_TIMEOUT_MS} ms`));
+			});
+			request.on('error', reject);
+
+			if (requestBody) {
+				request.write(requestBody);
+			}
+
+			request.end();
+		});
+	} catch (error) {
+		if (shouldRetryRequest(error, attempt)) {
+			return await httpRequestWithRetry(config, attempt + 1);
+		}
+
+		throw error;
+	}
+}
+
+function normalizeHeaderValue(value: string | string[] | undefined): string | undefined {
+	if (Array.isArray(value)) {
+		return value[0];
+	}
+
+	return value;
+}
+
+function normalizeNonEmptyString(value: unknown): string | undefined {
+	if (typeof value !== 'string') {
+		return undefined;
+	}
+
+	const normalized = value.trim();
+	return normalized ? normalized : undefined;
+}
+
+function normalizeNumber(value: unknown): number | undefined {
+	if (typeof value === 'number' && Number.isFinite(value)) {
+		return value;
+	}
+
+	if (typeof value === 'string' && value.trim() !== '') {
+		const parsed = Number(value);
+		if (Number.isFinite(parsed)) {
+			return parsed;
+		}
+	}
+
+	return undefined;
+}
+
+function normalizeQrLoginPageUrl(input?: string): string {
+	const target = normalizeNonEmptyString(input) ?? QR_LOGIN_DEFAULT_PAGE_URL;
+	return new URL(target).toString();
+}
+
+function parseQrLoginState(rawState: unknown): QrLoginState {
+	const parsed = unwrapSingleItemArray(parseRawQrStateValue(rawState));
+
+	if (!parsed || typeof parsed !== 'object') {
+		throw new Error('QR Login State JSON must be an object.');
+	}
+
+	const candidate = unwrapQrStateCandidate(parsed);
+	const browserId = normalizeNonEmptyString(candidate.browserId);
+	const loginOrigin = normalizeNonEmptyString(candidate.loginOrigin);
+	const loginPageUrl = normalizeNonEmptyString(candidate.loginPageUrl);
+	const pcfToken = normalizeNonEmptyString(candidate.pcfToken);
+	const regSource = normalizeNonEmptyString(candidate.regSource);
+	const uuid = normalizeNonEmptyString(candidate.uuid);
+	const lang = normalizeNonEmptyString(candidate.lang) ?? QR_LOGIN_DEFAULT_LANG;
+	const seq = normalizeNumber(candidate.seq);
+	const step = normalizeNumber(candidate.step);
+
+	if (!browserId || !loginOrigin || !loginPageUrl || !pcfToken || !regSource || !uuid) {
+		throw new Error('QR Login State JSON is missing required QR login fields.');
+	}
+
+	if (seq === undefined || step === undefined) {
+		throw new Error('QR Login State JSON must include numeric seq and step values.');
+	}
+
+	return {
+		browserId,
+		cookies: isCookieJar(candidate.cookies) ? candidate.cookies : {},
+		lang,
+		loginOrigin,
+		loginPageUrl,
+		pcfToken,
+		regSource,
+		scannedDisplayName: normalizeNonEmptyString(candidate.scannedDisplayName),
+		scannedHeadUrl: normalizeNonEmptyString(candidate.scannedHeadUrl),
+		seq,
+		step,
+		uuid,
+		vCode: normalizeNonEmptyString(candidate.vCode),
+	};
+}
+
+function parseRawQrStateValue(rawState: unknown): unknown {
+	if (typeof rawState === 'string') {
+		const normalized = rawState.trim();
+		if (!normalized) {
+			throw new Error('QR Login State JSON is required.');
+		}
+
+		try {
+			return JSON.parse(normalized);
+		} catch {
+			throw new Error('QR Login State JSON is not valid JSON.');
+		}
+	}
+
+	return rawState;
+}
+
+function unwrapQrStateCandidate(value: object): Partial<QrLoginState> {
+	const candidate = value as {
+		loginState?: unknown;
+		loginStateJson?: unknown;
+	};
+
+	if (candidate.loginState && typeof candidate.loginState === 'object') {
+		return candidate.loginState as Partial<QrLoginState>;
+	}
+
+	if (typeof candidate.loginStateJson === 'string') {
+		const nestedParsed = parseRawQrStateValue(candidate.loginStateJson);
+		if (nestedParsed && typeof nestedParsed === 'object') {
+			return nestedParsed as Partial<QrLoginState>;
+		}
+	}
+
+	return value as Partial<QrLoginState>;
+}
+
+function unwrapSingleItemArray(value: unknown): unknown {
+	if (!Array.isArray(value)) {
+		return value;
+	}
+
+	if (value.length === 0) {
+		throw new Error('QR Login State JSON array is empty.');
+	}
+
+	return value[0];
+}
+
+async function postQrApi<T>(options: {
+	body: string;
+	jar: CookieJar;
+	lang: string;
+	loginOrigin: string;
+	loginPageUrl: string;
+	pathname: string;
+}): Promise<QrApiResponse<T>> {
+	const response = await httpRequest({
+		body: options.body,
+		headers: {
+			Accept: 'application/json, text/plain, */*',
+			'Accept-Language': buildAcceptLanguage(options.lang),
+			'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+			Origin: options.loginOrigin,
+			Referer: options.loginPageUrl,
+			'X-Requested-With': 'XMLHttpRequest',
+		},
+		jar: options.jar,
+		method: 'POST',
+		url: new URL(options.pathname, options.loginOrigin).toString(),
+	});
+
+	let parsedResponse: unknown;
+
+	try {
+		parsedResponse = JSON.parse(response.bodyText);
+	} catch {
+		throw new Error(`QR login API returned invalid JSON from ${options.pathname}.`);
+	}
+
+	if (!parsedResponse || typeof parsedResponse !== 'object') {
+		throw new Error(`QR login API returned an unexpected payload from ${options.pathname}.`);
+	}
+
+	return parsedResponse as QrApiResponse<T>;
+}
+
+function unwrapQrApiPayload<T>(response: QrApiResponse<T>): T {
+	if (!response.data || typeof response.data !== 'object') {
+		throw new Error('QR login API returned a success response without a payload.');
+	}
+
+	return response.data;
+}
+
+function updateCookieJar(cookieJar: CookieJar, setCookieHeader: string[] | string | undefined): void {
+	const setCookieValues = Array.isArray(setCookieHeader)
+		? setCookieHeader
+		: typeof setCookieHeader === 'string'
+			? [setCookieHeader]
+			: [];
+
+	for (const setCookieValue of setCookieValues) {
+		const [cookiePair] = setCookieValue.split(';', 1);
+		const separatorIndex = cookiePair.indexOf('=');
+		if (separatorIndex <= 0) {
+			continue;
+		}
+
+		const cookieName = cookiePair.slice(0, separatorIndex).trim();
+		const cookieValue = cookiePair.slice(separatorIndex + 1).trim();
+
+		if (cookieName) {
+			cookieJar[cookieName] = cookieValue;
+		}
+	}
+}
+
+function isCookieJar(value: unknown): value is CookieJar {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		return false;
+	}
+
+	return Object.values(value).every((entry) => typeof entry === 'string');
+}
+
+function shouldRetryRequest(error: unknown, attempt: number): boolean {
+	if (attempt >= QR_LOGIN_MAX_RETRIES) {
+		return false;
+	}
+
+	if (!error || typeof error !== 'object') {
+		return false;
+	}
+
+	const candidate = error as NodeJS.ErrnoException;
+	const retryableCodes = new Set(['ECONNRESET', 'EPIPE', 'ETIMEDOUT']);
+
+	return Boolean(candidate.code && retryableCodes.has(candidate.code));
+}

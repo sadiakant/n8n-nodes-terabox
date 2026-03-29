@@ -1,66 +1,126 @@
 import {
-    IExecuteFunctions,
-    IHookFunctions,
-    ILoadOptionsFunctions,
-    IHttpRequestOptions,
-    IHttpRequestMethods,
-    IDataObject,
+	IDataObject,
+	IExecuteFunctions,
+	IHookFunctions,
+	IHttpRequestMethods,
+	IHttpRequestOptions,
+	ILoadOptionsFunctions,
 } from 'n8n-workflow';
-import crypto from 'crypto';
+import {
+	buildTeraboxHeaders,
+	buildTeraboxQuery,
+	getTeraboxSession,
+} from './SessionAuth';
+
+type TeraboxContext = IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions;
+
+type TeraboxRequestOptions = {
+	bodyAsForm?: boolean;
+	encoding?: 'arraybuffer';
+	expectText?: boolean;
+	includeBdstoken?: boolean;
+	includeCommonQuery?: boolean;
+	uri?: string;
+};
+
+type TeraboxRawResponse = Buffer | IDataObject | string;
 
 /**
- * Make an API request to Terabox
+ * Make a JSON API request to TeraBox using the desktop/browser session model.
  */
 export async function teraboxApiRequest(
-    this: IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions,
-    method: IHttpRequestMethods,
-    endpoint: string,
-    body: IDataObject = {},
-    qs: IDataObject = {},
-    uri?: string,
-): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+	this: TeraboxContext,
+	method: IHttpRequestMethods,
+	endpoint: string,
+	body: IDataObject = {},
+	qs: IDataObject = {},
+	options: TeraboxRequestOptions = {},
+): Promise<IDataObject> {
+	const responseData = await teraboxRequest.call(this, method, endpoint, body, qs, options);
 
-    const options: IHttpRequestOptions = {
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        method,
-        body: Object.keys(body).length ? body : undefined,
-        qs,
-        url: uri || `https://www.terabox.com${endpoint}`,
-        json: true,
-    };
+	if (typeof responseData !== 'object' || responseData === null || Array.isArray(responseData) || Buffer.isBuffer(responseData)) {
+		throw new Error('TeraBox returned an unexpected non-JSON response.');
+	}
 
-    let responseData;
-    try {
-        responseData = await this.helpers.httpRequestWithAuthentication.call(
-            this,
-            'teraboxApi',
-            options,
-        );
-    } catch (error) {
-        throw new Error(`Terabox Error: ${error.message}`);
-    }
+	if (typeof responseData.errno === 'number' && responseData.errno !== 0) {
+		throw new Error(
+			`TeraBox API returned error code ${responseData.errno}: ${
+				(typeof responseData.show_msg === 'string' && responseData.show_msg) ||
+				(typeof responseData.errmsg === 'string' && responseData.errmsg) ||
+				'Unknown error'
+			}`,
+		);
+	}
 
-    if (responseData.errno && responseData.errno !== 0) {
-        throw new Error(
-            `Terabox API returned error code ${responseData.errno}: ${responseData.show_msg || 'Unknown Error'}`,
-        );
-    }
-
-    return responseData;
+	return responseData;
 }
 
 /**
- * Generate MD5 Signature required for Token Exchange
+ * Make a text request to TeraBox while still attaching the active session.
  */
-export function generateTeraboxSignature(
-    clientId: string,
-    timestamp: string,
-    clientSecret: string,
-    privateSecret: string,
-): string {
-    const stringToSign = `${clientId}_${timestamp}_${clientSecret}_${privateSecret}`;
-    return crypto.createHash('md5').update(stringToSign).digest('hex');
+export async function teraboxTextRequest(
+	this: TeraboxContext,
+	method: IHttpRequestMethods,
+	endpoint: string,
+	body: IDataObject = {},
+	qs: IDataObject = {},
+	options: TeraboxRequestOptions = {},
+): Promise<string> {
+	const responseData = await teraboxRequest.call(this, method, endpoint, body, qs, {
+		...options,
+		expectText: true,
+	});
+
+	if (typeof responseData !== 'string') {
+		throw new Error('TeraBox returned an unexpected non-text response.');
+	}
+
+	return responseData;
+}
+
+/**
+ * Make a raw request to TeraBox while still attaching the active session cookies.
+ */
+export async function teraboxRequest(
+	this: TeraboxContext,
+	method: IHttpRequestMethods,
+	endpoint: string,
+	body: IDataObject = {},
+	qs: IDataObject = {},
+	options: TeraboxRequestOptions = {},
+): Promise<TeraboxRawResponse> {
+	const session = await getTeraboxSession.call(this);
+	const url = options.uri ?? `${session.baseUrl}${endpoint}`;
+	const requestOptions = {
+		method,
+		url,
+		headers: buildTeraboxHeaders(session),
+		json: !options.expectText && options.encoding !== 'arraybuffer',
+		qs: options.includeCommonQuery === false ? qs : buildTeraboxQuery(session, qs, { includeBdstoken: options.includeBdstoken }),
+	} as IHttpRequestOptions & { form?: IDataObject };
+
+	if (Object.keys(body).length > 0) {
+		if (options.bodyAsForm ?? true) {
+			requestOptions.form = body;
+		} else {
+			requestOptions.body = body;
+		}
+	}
+
+	if (options.expectText) {
+		requestOptions.headers = {
+			...requestOptions.headers,
+			Accept: 'application/vnd.apple.mpegurl, text/plain, */*',
+		};
+	}
+
+	if (options.encoding) {
+		requestOptions.encoding = options.encoding;
+	}
+
+	try {
+		return (await this.helpers.httpRequest(requestOptions)) as TeraboxRawResponse;
+	} catch (error) {
+		throw new Error(`TeraBox request failed: ${(error as Error).message}`);
+	}
 }
