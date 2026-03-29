@@ -4,8 +4,13 @@
   "description": "",
   "license": "MIT",
   "homepage": "",
-  "keywords": ["n8n-community-node-package"],
-  "author": { "name": "sadiakant", "email": "krushnakantsadiya@gmail.com" },
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "author": {
+    "name": "sadiakant",
+    "email": "krushnakantsadiya@gmail.com"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/<...>/n8n-nodes-<...>.git"
@@ -19,12 +24,18 @@
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "n8n": {
     "n8nNodesApiVersion": 1,
     "strict": true,
-    "credentials": ["dist/credentials/TeraboxOAuth2Api.credentials.js"],
-    "nodes": ["dist/nodes/Terabox/Terabox.node.js"]
+    "credentials": [
+      "dist/credentials/TeraboxApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Terabox/Terabox.node.js"
+    ]
   },
   "devDependencies": {
     "@n8n/node-cli": "*",
@@ -33,5 +44,7 @@
     "release-it": "^19.0.4",
     "typescript": "5.9.2"
   },
-  "peerDependencies": { "n8n-workflow": "*" }
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
 }
