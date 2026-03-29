@@ -43,13 +43,21 @@ export async function teraboxApiRequest(
 	}
 
 	if (typeof responseData.errno === 'number' && responseData.errno !== 0) {
-		throw new Error(
-			`TeraBox API returned error code ${responseData.errno}: ${
-				(typeof responseData.show_msg === 'string' && responseData.show_msg) ||
-				(typeof responseData.errmsg === 'string' && responseData.errmsg) ||
-				'Unknown error'
-			}`,
-		);
+		const errno = responseData.errno as number;
+		const messages: Record<number, string> = {
+			2: 'Parameter error or missing parameter (ensure path format is correct)',
+			111: 'Session expired or bdstoken invalid. Please refresh your credentials.',
+			[-6]: 'Refresh JS Token (jsToken mismatch)',
+			[-31]: 'Service temporarily unavailable or rate limited',
+		};
+
+		const errmsg =
+			(typeof responseData.show_msg === 'string' && responseData.show_msg) ||
+			(typeof responseData.errmsg === 'string' && responseData.errmsg) ||
+			messages[errno] ||
+			'Unknown error';
+
+		throw new Error(`TeraBox API returned error code ${errno}: ${errmsg}`);
 	}
 
 	return responseData;

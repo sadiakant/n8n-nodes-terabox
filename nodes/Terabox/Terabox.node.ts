@@ -22,7 +22,7 @@ export class Terabox implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Terabox',
 		name: 'terabox',
-		icon: { light: 'file:terabox.svg', dark: 'file:terabox.dark.svg' },
+		icon: 'file:terabox.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
@@ -191,20 +191,143 @@ export class Terabox implements INodeType {
 						});
 						returnData.push({ json: responseData, pairedItem: { item: i } });
 					} else if (['delete', 'copy', 'move', 'rename'].includes(operation)) {
-						const filelistValue = this.getNodeParameter('filelist', i);
-						const filelist = parseJsonValue(filelistValue);
-						const qs = { async: 0, opera: operation };
-						const body = { filelist: JSON.stringify(filelist) };
-						const responseData = await teraboxApiRequest.call(this, 'POST', '/api/filemanager', body, qs, {
-							includeBdstoken: true,
-						});
+						let filelistJson = '';
+
+						if (operation === 'delete') {
+							const filelistValue = this.getNodeParameter('filelist', i);
+							const parsedFilelist = parseJsonValue(filelistValue);
+							const listArray = (Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]) as Array<string | IDataObject>;
+							const pathList = listArray
+								.map((item) => (typeof item === 'string' ? item : (item.path as string)))
+								.filter((p) => typeof p === 'string' && p.trim() !== '');
+							if (pathList.length === 0) {
+								throw new NodeOperationError(this.getNode(), 'No valid file paths provided.', { itemIndex: i });
+							}
+							filelistJson = JSON.stringify(pathList);
+						} else {
+							const filelistValue = this.getNodeParameter('filelist', i);
+							const parsedFilelist = parseJsonValue(filelistValue);
+							const listArray = (Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]) as Array<string | IDataObject>;
+							const objList = listArray
+								.map((item) => (typeof item === 'string' ? { path: item } : item))
+								.filter((item) => item && typeof item.path === 'string' && (item.path as string).trim() !== '');
+							if (objList.length === 0) {
+								throw new NodeOperationError(this.getNode(), 'No valid file paths provided.', { itemIndex: i });
+							}
+							filelistJson = JSON.stringify(objList);
+						}
+
+						const session = await getTeraboxSession.call(this);
+						if (!session.bdstoken) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Authenticated bdstoken is missing in your credentials. File management operations require this token.',
+								{ itemIndex: i },
+							);
+						}
+
+						// TeraBox filemanager requires opera/async in query string, filelist as URL-encoded form body
+						const fmQs: IDataObject = {
+							app_id: '250528',
+							async: 2,
+							bdstoken: session.bdstoken,
+							channel: 'dubox',
+							clienttype: 0,
+							'dp-logid': `${Date.now()}0001`,
+							jsToken: session.jsToken,
+							opera: operation,
+							web: 1,
+						};
+
+						if (operation === 'copy' || operation === 'move') {
+							fmQs.ondup = 'fail';
+							fmQs.onnest = 'fail';
+						}
+
+						const responseData = (await this.helpers.httpRequest({
+							method: 'POST',
+							url: `${session.baseUrl}/api/filemanager`,
+							headers: {
+								Accept: 'application/json, text/plain, */*',
+								'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+								Cookie: session.cookieHeader,
+								Origin: session.baseUrl,
+								Referer: `${session.baseUrl}/main?category=all&path=%2F`,
+								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+							},
+							qs: fmQs,
+							body: `filelist=${encodeURIComponent(filelistJson)}`,
+							json: true,
+						})) as IDataObject;
+
+						if (typeof responseData.errno === 'number' && responseData.errno !== 0) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`TeraBox filemanager returned error code ${responseData.errno}: ${responseData.show_msg || responseData.errmsg || 'Unknown error'}`,
+								{ itemIndex: i },
+							);
+						}
+
 						returnData.push({ json: responseData, pairedItem: { item: i } });
 					} else if (operation === 'download') {
-						throw new NodeOperationError(
-							this.getNode(),
-							'File download is not available in the session-auth version yet. Use File -> Get Metadata with "Include Download Link" enabled for now.',
-							{ itemIndex: i },
+						const downloadPath = this.getNodeParameter('downloadPath', i) as string;
+						if (!downloadPath.trim()) {
+							throw new NodeOperationError(this.getNode(), 'File path is required for download.', { itemIndex: i });
+						}
+
+						// Step 1: Get the download link via filemetas
+						const metaResponse = await teraboxApiRequest.call(
+							this,
+							'GET',
+							'/api/filemetas',
+							{},
+							{ dlink: 1, target: JSON.stringify([downloadPath]) },
+							{ includeBdstoken: true },
 						);
+
+						const fileInfo = (metaResponse.info as IDataObject[] | undefined)?.[0] as IDataObject | undefined;
+						const dlink = fileInfo?.dlink as string | undefined;
+						if (!dlink) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Could not obtain a download link. The file may not exist or the path may be incorrect.',
+								{ itemIndex: i },
+							);
+						}
+
+						// Step 2: Download the binary content from the dlink
+						const session = await getTeraboxSession.call(this);
+						const confirmedFileInfo = fileInfo as IDataObject;
+						const binaryData = (await this.helpers.httpRequest({
+							method: 'GET',
+							url: dlink,
+							headers: {
+								Cookie: session.cookieHeader,
+								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+							},
+							encoding: 'arraybuffer',
+							returnFullResponse: true,
+						})) as { body: Buffer; headers: Record<string, string> };
+
+						const fileName = (confirmedFileInfo.server_filename as string) || downloadPath.split('/').pop() || 'download';
+						const mimeType = binaryData.headers?.['content-type'] || 'application/octet-stream';
+						const binary = await this.helpers.prepareBinaryData(
+							Buffer.from(binaryData.body),
+							fileName,
+							mimeType,
+						);
+
+						returnData.push({
+							json: {
+								fileName,
+								filePath: downloadPath,
+								fs_id: confirmedFileInfo.fs_id,
+								mimeType,
+								size: confirmedFileInfo.size,
+							},
+							binary: { data: binary },
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'upload') {
 						throw new NodeOperationError(
 							this.getNode(),

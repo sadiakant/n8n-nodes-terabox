@@ -45,6 +45,7 @@ type QrApiResponse<T> = {
 	msg?: string;
 	show_msg?: string;
 	v?: string;
+	vcode?: string;
 };
 
 type QrCodeStartPayload = {
@@ -62,6 +63,8 @@ type QrCodeCheckPayload = {
 	url_domain_prefix?: string;
 	userid?: number | string;
 	v?: string;
+	vcode?: string;
+	bduss?: string;
 	step?: number;
 };
 
@@ -235,8 +238,8 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 	const vCode =
 		normalizeNonEmptyString(checkResponse.v) ??
 		normalizeNonEmptyString(payload.v) ??
-		normalizeNonEmptyString((checkResponse as any).vcode) ??
-		normalizeNonEmptyString((payload as any).vcode);
+		normalizeNonEmptyString(checkResponse.vcode) ??
+		normalizeNonEmptyString(payload.vcode);
 
 	if (vCode) {
 		state.vCode = vCode;
@@ -245,7 +248,7 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 	const foundNdus =
 		normalizeNonEmptyString(payload.ndus) ??
 		normalizeNonEmptyString(cookieJar.ndus) ??
-		normalizeNonEmptyString((payload as any).bduss);
+		normalizeNonEmptyString(payload.bduss);
 
 	// If we have ndus, we are confirmed regardless of what the internal step was
 	if (foundNdus || payload.userid) {

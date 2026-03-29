@@ -24,12 +24,12 @@ export const fileDescription: INodeProperties[] = [
                 description: 'Delete a file or folder',
                 action: 'Delete a file',
             },
-			{
-				name: 'Download',
-				value: 'download',
-				description: 'Not available yet in the session-auth version',
-				action: 'Download a file',
-			},
+            {
+                name: 'Download',
+                value: 'download',
+                description: 'Download a file as binary data',
+                action: 'Download a file',
+            },
             {
                 name: 'Get Metadata',
                 value: 'getMetadata',
@@ -60,12 +60,12 @@ export const fileDescription: INodeProperties[] = [
                 description: 'Search files by name',
                 action: 'Search files',
             },
-			{
-				name: 'Upload',
-				value: 'upload',
-				description: 'Not available yet in the session-auth version',
-				action: 'Upload a file',
-			},
+            {
+                name: 'Upload',
+                value: 'upload',
+                description: 'Not available yet in the session-auth version',
+                action: 'Upload a file',
+            },
         ],
         default: 'list',
     },
@@ -135,8 +135,8 @@ export const fileFields: INodeProperties[] = [
     },
     // Download Fields
     {
-        displayName: 'File IDs to Download',
-        name: 'fidlist',
+        displayName: 'File Path',
+        name: 'downloadPath',
         type: 'string',
         required: true,
         displayOptions: {
@@ -146,7 +146,7 @@ export const fileFields: INodeProperties[] = [
             },
         },
         default: '',
-        description: 'Comma-separated list of file IDs to download',
+        description: 'Absolute path of the file to download. Use {{ $JSON.path }} or {{ $JSON.list[0].path }} from a List node.',
     },
     // Metadata Fields
     {
@@ -187,8 +187,8 @@ export const fileFields: INodeProperties[] = [
                 operation: ['delete', 'copy', 'move', 'rename'],
             },
         },
-        default: '["/test.mp4"]',
-        description: 'Provide an array of file/folder objects or paths based on the operation. Check docs for object format.',
+        default: '["/Folder/file.mp4"]',
+        description: 'For Delete, provide path strings: ["/path"]. For Copy/Move, use objects: [{"path":"/src", "dest":"/target"}]. For Rename: [{"path":"/old", "newname":"new"}].',
     },
     // Upload Fields
     {
