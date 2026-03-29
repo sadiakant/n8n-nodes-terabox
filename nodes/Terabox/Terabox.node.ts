@@ -4,6 +4,9 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	NodeConnectionTypes,
+	NodeApiError,
+	NodeOperationError,
+	JsonObject,
 } from 'n8n-workflow';
 import { authenticationDescription, authenticationFields } from './resources/authentication';
 import { userDescription, userFields } from './resources/user';
@@ -48,20 +51,20 @@ export class Terabox implements INodeType {
 						value: 'authentication',
 					},
 					{
-						name: 'User',
-						value: 'user',
-					},
-					{
 						name: 'File',
 						value: 'file',
+					},
+					{
+						name: 'Media',
+						value: 'media',
 					},
 					{
 						name: 'Share',
 						value: 'share',
 					},
 					{
-						name: 'Media',
-						value: 'media',
+						name: 'User',
+						value: 'user',
 					},
 				],
 				default: 'authentication',
@@ -129,7 +132,7 @@ export class Terabox implements INodeType {
 							json: true,
 						};
 
-						const responseData = await this.helpers.httpRequest(options);
+						const responseData = await this.helpers.httpRequestWithAuthentication.call(this, 'teraboxApi', options);
 
 						returnData.push({
 							json: responseData.data || responseData,
@@ -190,11 +193,11 @@ export class Terabox implements INodeType {
 								encoding: 'arraybuffer' as const,
 							};
 
-							const fileBuffer = await this.helpers.httpRequest(downloadOptions);
+							const fileBuffer = await this.helpers.httpRequestWithAuthentication.call(this, 'teraboxApi', downloadOptions);
 
 							const binaryPropertyName = 'data'; // Default binary property name, typically 'data'
 							const binaryData = await this.helpers.prepareBinaryData(
-								Buffer.from(fileBuffer as any),
+								Buffer.from(fileBuffer as ArrayBuffer),
 								`terabox_file_${downloadData.dlink[0].fs_id}`,
 							);
 
@@ -204,7 +207,7 @@ export class Terabox implements INodeType {
 								pairedItem: { item: i }
 							});
 						} else {
-							throw new Error('No dlink returned in the response');
+							throw new NodeOperationError(this.getNode(), 'No dlink returned in the response', { itemIndex: i });
 						}
 					} else if (operation === 'upload') {
 						const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i, 'data') as string;
@@ -268,11 +271,11 @@ export class Terabox implements INodeType {
 								encoding: 'arraybuffer' as const,
 							};
 
-							const fileBuffer = await this.helpers.httpRequest(downloadOptions);
+							const fileBuffer = await this.helpers.httpRequestWithAuthentication.call(this, 'teraboxApi', downloadOptions);
 
 							const binaryPropertyName = 'data';
 							const binaryData = await this.helpers.prepareBinaryData(
-								Buffer.from(fileBuffer as any),
+								Buffer.from(fileBuffer as ArrayBuffer),
 								downloadData.list[0].server_filename || `terabox_share_${downloadData.list[0].fs_id}`,
 							);
 
@@ -282,7 +285,7 @@ export class Terabox implements INodeType {
 								pairedItem: { item: i }
 							});
 						} else {
-							throw new Error('No dlink returned in the share download response');
+							throw new NodeOperationError(this.getNode(), 'No dlink returned in the share download response', { itemIndex: i });
 						}
 					}
 				} else if (resource === 'media') {
@@ -295,7 +298,7 @@ export class Terabox implements INodeType {
 							url: 'https://www.terabox.com/openapi/api/streaming',
 							qs: { ...qs, access_tokens: credentials.accessToken },
 						};
-						const responseData = await this.helpers.httpRequest(options);
+						const responseData = await this.helpers.httpRequestWithAuthentication.call(this, 'teraboxApi', options);
 						returnData.push({ json: { m3u8: responseData }, pairedItem: { item: i } });
 					} else if (operation === 'shareStreamUrl') {
 						const shareid = this.getNodeParameter('shareid', i) as string;
@@ -309,7 +312,7 @@ export class Terabox implements INodeType {
 							url: 'https://www.terabox.com/openapi/share/streaming',
 							qs: { ...qs, access_tokens: credentials.accessToken },
 						};
-						const responseData = await this.helpers.httpRequest(options);
+						const responseData = await this.helpers.httpRequestWithAuthentication.call(this, 'teraboxApi', options);
 						returnData.push({ json: { m3u8: responseData }, pairedItem: { item: i } });
 					} else if (operation === 'metadata') {
 						const shareid = this.getNodeParameter('shareid', i) as string;
@@ -330,7 +333,10 @@ export class Terabox implements INodeType {
 						pairedItem: { item: i },
 					});
 				} else {
-					throw error;
+					if (error instanceof NodeApiError || error instanceof NodeOperationError) {
+						throw error;
+					}
+					throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });
 				}
 			}
 		}

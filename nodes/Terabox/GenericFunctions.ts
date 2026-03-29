@@ -4,6 +4,7 @@ import {
     ILoadOptionsFunctions,
     IHttpRequestOptions,
     IHttpRequestMethods,
+    IDataObject,
 } from 'n8n-workflow';
 import crypto from 'crypto';
 
@@ -14,10 +15,10 @@ export async function teraboxApiRequest(
     this: IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions,
     method: IHttpRequestMethods,
     endpoint: string,
-    body: any = {},
-    qs: any = {},
+    body: IDataObject = {},
+    qs: IDataObject = {},
     uri?: string,
-): Promise<any> {
+): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
 
     const options: IHttpRequestOptions = {
         headers: {

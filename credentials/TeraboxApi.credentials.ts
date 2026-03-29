@@ -8,6 +8,7 @@ import {
 export class TeraboxApi implements ICredentialType {
     name = 'teraboxApi';
     displayName = 'Terabox API';
+    icon = 'file:terabox.svg' as const;
     documentationUrl = 'https://github.com/org/-terabox?tab=readme-ov-file#credentials';
 
     properties: INodeProperties[] = [

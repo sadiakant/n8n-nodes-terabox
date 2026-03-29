@@ -13,16 +13,16 @@ export const fileDescription: INodeProperties[] = [
         },
         options: [
             {
-                name: 'List',
-                value: 'list',
-                description: 'List files and folders in a directory',
-                action: 'List files',
+                name: 'Copy',
+                value: 'copy',
+                description: 'Copy a file or folder',
+                action: 'Copy a file',
             },
             {
-                name: 'Search',
-                value: 'search',
-                description: 'Search files by name',
-                action: 'Search files',
+                name: 'Delete',
+                value: 'delete',
+                description: 'Delete a file or folder',
+                action: 'Delete a file',
             },
             {
                 name: 'Download',
@@ -37,10 +37,10 @@ export const fileDescription: INodeProperties[] = [
                 action: 'Get file metadata',
             },
             {
-                name: 'Delete',
-                value: 'delete',
-                description: 'Delete a file or folder',
-                action: 'Delete a file',
+                name: 'List',
+                value: 'list',
+                description: 'List files and folders in a directory',
+                action: 'List files',
             },
             {
                 name: 'Move',
@@ -49,16 +49,16 @@ export const fileDescription: INodeProperties[] = [
                 action: 'Move a file',
             },
             {
-                name: 'Copy',
-                value: 'copy',
-                description: 'Copy a file or folder',
-                action: 'Copy a file',
-            },
-            {
                 name: 'Rename',
                 value: 'rename',
                 description: 'Rename a file or folder',
                 action: 'Rename a file',
+            },
+            {
+                name: 'Search',
+                value: 'search',
+                description: 'Search files by name',
+                action: 'Search files',
             },
             {
                 name: 'Upload',

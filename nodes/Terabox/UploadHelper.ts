@@ -6,8 +6,9 @@ export async function uploadTeraboxFile(
     this: IExecuteFunctions,
     binaryDataBuffer: Buffer,
     targetPath: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     credentials: any
-): Promise<any> {
+): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
     // 1. Fetch token info to get upload_domain
     const tokenInfoOptions = {
         method: 'POST' as const,
@@ -18,7 +19,7 @@ export async function uploadTeraboxFile(
         form: { access_token: credentials.accessToken },
         json: true,
     };
-    const tokenInfo = await this.helpers.httpRequest(tokenInfoOptions);
+    const tokenInfo = await this.helpers.httpRequestWithAuthentication.call(this, 'teraboxApi', tokenInfoOptions);
     const uploadDomain = tokenInfo.data.upload_domain || 'c-jp.terabox.com';
 
     // 2. Chunk the file
@@ -88,7 +89,7 @@ export async function uploadTeraboxFile(
             json: true,
         };
 
-        const chunkResponse = await this.helpers.httpRequest(uploadOptions);
+        const chunkResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'teraboxApi', uploadOptions);
         if (chunkResponse.error_code) {
             throw new Error(`Chunk upload failed: ${chunkResponse.error_msg}`);
         }
