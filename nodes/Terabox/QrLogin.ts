@@ -130,7 +130,7 @@ export async function startQrLogin(
 			client: 'web',
 			clientfrom: 'h5',
 			lang,
-			pass_version: '3.0',
+			pass_version: '2.8',
 			pcftoken: tokens.pcfToken,
 		}),
 		jar: cookieJar,
@@ -184,19 +184,18 @@ export async function startQrLogin(
 export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 	const state = parseQrLoginState(rawState);
 	const cookieJar: CookieJar = { ...state.cookies };
-	// Use nextSeq for the request but don't strictly increment in state if it causes issues,
-	// though incrementing is standard for polling sequence numbers.
-	const nextSeq = state.seq + 1;
+	// Use the existing seq for polling; some Baidu implementations require a stable sequence/seed.
+	const currentSeq = state.seq;
 
 	const requestParams: Record<string, string | number> = {
 		browserid: state.browserId,
 		client: 'web',
 		clientfrom: 'h5',
 		lang: state.lang,
-		pass_version: '3.0',
+		pass_version: '2.8',
 		pcftoken: state.pcfToken,
 		reg_source: state.regSource,
-		seq: nextSeq,
+		seq: currentSeq,
 		step: state.step,
 		uuid: state.uuid,
 	};
@@ -215,7 +214,6 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 	});
 
 	state.cookies = { ...cookieJar };
-	state.seq = nextSeq;
 
 	const responseCode = normalizeNumber(checkResponse.code ?? checkResponse.errno) ?? -1;
 	const responseMessage =
@@ -234,16 +232,23 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 	}
 
 	const payload = unwrapQrApiPayload(checkResponse);
-	const vCode = normalizeNonEmptyString(checkResponse.v) ?? normalizeNonEmptyString(payload.v);
+	const vCode =
+		normalizeNonEmptyString(checkResponse.v) ??
+		normalizeNonEmptyString(payload.v) ??
+		normalizeNonEmptyString((checkResponse as any).vcode) ??
+		normalizeNonEmptyString((payload as any).vcode);
+
 	if (vCode) {
 		state.vCode = vCode;
 	}
 
-	const responseNdus = normalizeNonEmptyString(payload.ndus) ?? normalizeNonEmptyString(cookieJar.ndus);
-	const isCurrentlyScanned = state.step === QR_LOGIN_STEP_SCANNED;
+	const foundNdus =
+		normalizeNonEmptyString(payload.ndus) ??
+		normalizeNonEmptyString(cookieJar.ndus) ??
+		normalizeNonEmptyString((payload as any).bduss);
 
 	// If we have ndus, we are confirmed regardless of what the internal step was
-	if (responseNdus || payload.userid) {
+	if (foundNdus || payload.userid) {
 		const finalSession = await finalizeQrLoginSession(state, payload);
 		return {
 			...finalSession,
@@ -257,7 +262,7 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 		};
 	}
 
-	if (isCurrentlyScanned) {
+	if (state.step === QR_LOGIN_STEP_SCANNED) {
 		state.scannedDisplayName = normalizeNonEmptyString(payload.uname) ?? state.scannedDisplayName;
 		state.scannedHeadUrl = normalizeNonEmptyString(payload.avatar_url) ?? state.scannedHeadUrl;
 		state.step = QR_LOGIN_STEP_CONFIRMED;
@@ -270,7 +275,7 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 			loginState: state,
 			loginStateJson: JSON.stringify(state),
 			message:
-				'QR code scanned. Confirm login in the TeraBox mobile app, then run Check QR Login again.',
+				'QR Code scanned. Proceed to confirm login on your mobile app, then UPDATE the loginStateJson parameter and run this node again.',
 			ok: true,
 			seq: state.seq,
 			status: 'pending_confirm',
@@ -280,7 +285,7 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 		};
 	}
 
-	// If we are here, it means code was 0 but we don't have confirmation yet or user info
+	// Stay in pending_confirm state
 	return buildPendingQrResponse(state, responseMessage);
 }
 
@@ -777,6 +782,9 @@ async function postQrApi<T>(options: {
 	loginPageUrl: string;
 	pathname: string;
 }): Promise<QrApiResponse<T>> {
+	const apiUrl = new URL(options.pathname, options.loginOrigin);
+	apiUrl.searchParams.set('t', String(Date.now()));
+
 	const response = await httpRequest({
 		body: options.body,
 		headers: {
@@ -789,7 +797,7 @@ async function postQrApi<T>(options: {
 		},
 		jar: options.jar,
 		method: 'POST',
-		url: new URL(options.pathname, options.loginOrigin).toString(),
+		url: apiUrl.toString(),
 	});
 
 	let parsedResponse: unknown;

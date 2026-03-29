@@ -164,7 +164,7 @@ export class Terabox implements INodeType {
 						const dir = this.getNodeParameter('dir', i) as string;
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const limit = returnAll ? 10000 : (this.getNodeParameter('limit', i) as number);
-						const qs = { dir, folder: 1, num: limit, page: 1 };
+						const qs = { dir, folder: 0, num: limit, page: 1 };
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/list', {}, qs, {
 							includeBdstoken: true,
 						});
