@@ -188,28 +188,151 @@ export class Terabox implements INodeType {
 				} else if (resource === 'file') {
 					if (operation === 'list') {
 						const dir = this.getNodeParameter('dir', i) as string;
-						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
-						const limit = returnAll ? 10000 : (this.getNodeParameter('limit', i) as number);
-						const qs = { dir, folder: 0, num: limit, page: 1 };
-						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/list', {}, qs, {
-							includeBdstoken: true,
-						});
-						returnData.push({
-							json: buildOperationOutput(resource, operation, responseData),
-							pairedItem: { item: i },
-						});
+						const categoryFilter = this.getNodeParameter('categoryFilter', i, 'all') as string;
+						const listMode = this.getNodeParameter('listMode', i, 'limit') as string;
+						const listLimitRaw = this.getNodeParameter('listLimit', i, 0) as unknown;
+						const lastHours = this.getNodeParameter('lastHours', i, 24) as number;
+						const lastDays = this.getNodeParameter('lastDays', i, 7) as number;
+						const fromDate = this.getNodeParameter('fromDate', i, '') as string;
+						const toDate = this.getNodeParameter('toDate', i, '') as string;
+						const invertOutput = this.getNodeParameter('invertOutput', i, false) as boolean;
+						const sortBy = this.getNodeParameter('sortBy', i, 'changeTime') as string;
+						const sortAscending = this.getNodeParameter('sortAscending', i, true) as boolean;
+						const listLimit = normalizeNumber(listLimitRaw) ?? 0;
+						const requestLimit = listMode === 'limit' ? (listLimit > 0 ? listLimit : 10000) : 10000;
+						const isRootDir = normalizeDirPath(dir) === '/';
+						if (listMode === 'dateRange') {
+							const fromMs = Date.parse(fromDate);
+							const toMs = Date.parse(toDate);
+							if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+								throw new NodeOperationError(this.getNode(), 'From Date and To Date must be valid dates.', {
+									itemIndex: i,
+								});
+							}
+							if (fromMs > toMs) {
+								throw new NodeOperationError(this.getNode(), 'From Date must be before or equal to To Date.', {
+									itemIndex: i,
+								});
+							}
+						}
+
+						// Root + category filter should behave like web UI category view (whole drive).
+						if (isRootDir && categoryFilter !== 'all') {
+							const selectedCategory = normalizeNumber(categoryFilter);
+							if (selectedCategory === undefined) {
+								throw new NodeOperationError(this.getNode(), 'Invalid category filter value.', {
+									itemIndex: i,
+								});
+							}
+
+							const categoryQs = { category: selectedCategory, num: requestLimit, page: 1 };
+							const categoryResponse = await teraboxApiRequest.call(
+								this,
+								'GET',
+								'/api/categorylist',
+								{},
+								categoryQs,
+								{ includeBdstoken: true },
+							);
+
+							const rawCategoryEntries = extractTeraboxEntries(categoryResponse);
+							if (rawCategoryEntries) {
+								const modeFilteredEntries = filterTeraboxEntriesByListMode(rawCategoryEntries, {
+									listMode,
+									lastDays,
+									lastHours,
+									fromDate,
+									toDate,
+									invertOutput,
+								});
+								const sortedEntries = sortTeraboxEntries(modeFilteredEntries, sortBy, sortAscending);
+								for (const entry of sortedEntries) {
+									returnData.push({
+										json: formatTeraboxListEntry(
+											entry && typeof entry === 'object'
+												? (entry as IDataObject)
+												: ({ value: entry } as IDataObject),
+										),
+										pairedItem: { item: i },
+									});
+								}
+							} else {
+								returnData.push({
+									json: buildOperationOutput(resource, operation, categoryResponse),
+									pairedItem: { item: i },
+								});
+							}
+						} else {
+							const qs = { dir, folder: 0, num: requestLimit, page: 1 };
+							const responseData = await teraboxApiRequest.call(this, 'GET', '/api/list', {}, qs, {
+								includeBdstoken: true,
+							});
+							const rawListEntries = extractTeraboxEntries(responseData);
+							const categoryFilteredEntries = rawListEntries
+								? filterTeraboxEntriesByCategory(rawListEntries, categoryFilter)
+								: undefined;
+							const modeFilteredEntries = categoryFilteredEntries
+								? filterTeraboxEntriesByListMode(categoryFilteredEntries, {
+									listMode,
+									lastDays,
+									lastHours,
+									fromDate,
+									toDate,
+									invertOutput,
+								})
+								: undefined;
+							if (modeFilteredEntries) {
+								const sortedEntries = sortTeraboxEntries(modeFilteredEntries, sortBy, sortAscending);
+								for (const entry of sortedEntries) {
+									returnData.push({
+										json: formatTeraboxListEntry(
+											entry && typeof entry === 'object'
+												? (entry as IDataObject)
+												: ({ value: entry } as IDataObject),
+										),
+										pairedItem: { item: i },
+									});
+								}
+							} else {
+								returnData.push({
+									json: buildOperationOutput(resource, operation, responseData),
+									pairedItem: { item: i },
+								});
+							}
+						}
 					} else if (operation === 'search') {
 						const key = this.getNodeParameter('key', i) as string;
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const categoryFilter = this.getNodeParameter('categoryFilter', i, 'all') as string;
 						const limit = returnAll ? 10000 : (this.getNodeParameter('limit', i) as number);
 						const qs = { key, num: limit, page: 1, recursion: 1 };
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/search', {}, qs, {
 							includeBdstoken: true,
 						});
-						returnData.push({
-							json: buildOperationOutput(resource, operation, responseData),
-							pairedItem: { item: i },
-						});
+						const hasSearchArray = Array.isArray(responseData.list) || Array.isArray(responseData.info);
+						const rawSearchEntries: unknown[] = Array.isArray(responseData.list)
+							? (responseData.list as unknown[])
+							: Array.isArray(responseData.info)
+								? (responseData.info as unknown[])
+								: [];
+						const searchEntries = filterTeraboxEntriesByCategory(rawSearchEntries, categoryFilter);
+						if (hasSearchArray) {
+							for (const entry of searchEntries) {
+								returnData.push({
+									json: formatTeraboxListEntry(
+										entry && typeof entry === 'object'
+											? (entry as IDataObject)
+											: ({ value: entry } as IDataObject),
+									),
+									pairedItem: { item: i },
+								});
+							}
+						} else {
+							returnData.push({
+								json: buildOperationOutput(resource, operation, responseData),
+								pairedItem: { item: i },
+							});
+						}
 					} else if (operation === 'getMetadata') {
 						const targetPathsStr = this.getNodeParameter('targetPaths', i) as string;
 						const dlink = this.getNodeParameter('dlink', i) as boolean;
@@ -815,6 +938,273 @@ function extractItemCount(responseData: IDataObject): number | undefined {
 	}
 
 	return undefined;
+}
+
+function formatTeraboxListEntry(entry: IDataObject): IDataObject {
+	const output: IDataObject = { ...entry };
+
+	// Thumbnail URLs are noisy for list output and can be huge.
+	delete output.thumbs;
+
+	formatTimestampField(output, 'server_mtime');
+	formatTimestampField(output, 'local_mtime');
+	formatTimestampField(output, 'local_ctime');
+	formatTimestampField(output, 'server_ctime');
+
+	const sizeValue = normalizeNumber(output.size);
+	if (sizeValue !== undefined) {
+		output.size_bytes = sizeValue;
+		output.size = formatBytes(sizeValue);
+	}
+
+	const fromType = normalizeNumber(output.from_type);
+	const category = normalizeNumber(output.category);
+	const isDirValue = normalizeNumber(output.isdir);
+	const isDir = isDirValue === 1;
+	output.file_type = resolveTeraboxFileTypeLabel(fromType, category, isDir);
+
+	return output;
+}
+
+function formatTimestampField(output: IDataObject, key: string): void {
+	const rawValue = normalizeNumber(output[key]);
+	if (rawValue === undefined || rawValue <= 0) {
+		return;
+	}
+
+	output[`${key}_unix`] = rawValue;
+	output[key] = formatUnixSecondsToLocal(rawValue);
+}
+
+function formatUnixSecondsToLocal(unixSeconds: number): string {
+	const date = new Date(unixSeconds * 1000);
+	if (Number.isNaN(date.getTime())) {
+		return String(unixSeconds);
+	}
+
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	const hour = String(date.getHours()).padStart(2, '0');
+	const minute = String(date.getMinutes()).padStart(2, '0');
+	const second = String(date.getSeconds()).padStart(2, '0');
+
+	return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
+function formatBytes(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes < 0) {
+		return String(bytes);
+	}
+
+	if (bytes < 1024) {
+		return `${bytes} B`;
+	}
+
+	const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
+	let value = bytes / 1024;
+	let unitIndex = 0;
+	while (value >= 1024 && unitIndex < units.length - 1) {
+		value /= 1024;
+		unitIndex++;
+	}
+
+	const fixed = value >= 10 ? value.toFixed(1) : value.toFixed(2);
+	return `${Number(fixed)} ${units[unitIndex]}`;
+}
+
+function extractTeraboxEntries(responseData: IDataObject): unknown[] | undefined {
+	if (Array.isArray(responseData.list)) {
+		return responseData.list as unknown[];
+	}
+
+	if (Array.isArray(responseData.info)) {
+		return responseData.info as unknown[];
+	}
+
+	return undefined;
+}
+
+function normalizeDirPath(dir: string): string {
+	const normalized = dir.trim();
+	if (!normalized || normalized === '/') {
+		return '/';
+	}
+
+	return normalized.replace(/\/+$/, '');
+}
+
+function filterTeraboxEntriesByListMode(
+	entries: unknown[],
+	params: {
+		listMode: string;
+		lastHours: number;
+		lastDays: number;
+		fromDate: string;
+		toDate: string;
+		invertOutput: boolean;
+	},
+): unknown[] {
+	if (!Array.isArray(entries) || params.listMode === 'limit') {
+		return Array.isArray(entries) ? entries : [];
+	}
+
+	const nowMs = Date.now();
+	let minTimeMs: number | undefined;
+	let maxTimeMs: number | undefined;
+
+	if (params.listMode === 'lastHours') {
+		minTimeMs = nowMs - Math.max(0, params.lastHours) * 60 * 60 * 1000;
+	} else if (params.listMode === 'lastDays') {
+		minTimeMs = nowMs - Math.max(0, params.lastDays) * 24 * 60 * 60 * 1000;
+	} else if (params.listMode === 'dateRange') {
+		const fromMs = Date.parse(params.fromDate);
+		const toMs = Date.parse(params.toDate);
+		if (Number.isFinite(fromMs)) {
+			minTimeMs = fromMs;
+		}
+		if (Number.isFinite(toMs)) {
+			maxTimeMs = toMs;
+		}
+	}
+
+	const filteredEntries = entries.filter((entry) => {
+		const changeTimeMs = getTeraboxEntryChangeTimeMs(entry);
+		if (changeTimeMs === undefined) {
+			return false;
+		}
+
+		if (minTimeMs !== undefined && changeTimeMs < minTimeMs) {
+			return false;
+		}
+
+		if (maxTimeMs !== undefined && changeTimeMs > maxTimeMs) {
+			return false;
+		}
+
+		return true;
+	});
+
+	if (params.invertOutput) {
+		return entries.filter((entry) => !filteredEntries.includes(entry));
+	}
+
+	return filteredEntries;
+}
+
+function getTeraboxEntryChangeTimeMs(entry: unknown): number | undefined {
+	if (!entry || typeof entry !== 'object') {
+		return undefined;
+	}
+
+	const record = entry as IDataObject;
+	const unixSeconds =
+		normalizeNumber(record.server_mtime) ??
+		normalizeNumber(record.local_mtime) ??
+		normalizeNumber(record.server_ctime) ??
+		normalizeNumber(record.local_ctime);
+
+	if (unixSeconds === undefined) {
+		return undefined;
+	}
+
+	return unixSeconds * 1000;
+}
+
+function sortTeraboxEntries(entries: unknown[], sortBy: string, ascending: boolean): unknown[] {
+	const sortableEntries = [...entries];
+
+	sortableEntries.sort((left, right) => {
+		const leftObj = left && typeof left === 'object' ? (left as IDataObject) : undefined;
+		const rightObj = right && typeof right === 'object' ? (right as IDataObject) : undefined;
+
+		let compareResult = 0;
+		if (sortBy === 'fileName') {
+			const leftName = normalizeString(leftObj?.server_filename) ?? '';
+			const rightName = normalizeString(rightObj?.server_filename) ?? '';
+			compareResult = leftName.localeCompare(rightName);
+		} else if (sortBy === 'size') {
+			const leftSize = normalizeNumber(leftObj?.size) ?? 0;
+			const rightSize = normalizeNumber(rightObj?.size) ?? 0;
+			compareResult = leftSize - rightSize;
+		} else {
+			const leftTime =
+				normalizeNumber(leftObj?.server_mtime) ??
+				normalizeNumber(leftObj?.local_mtime) ??
+				normalizeNumber(leftObj?.server_ctime) ??
+				normalizeNumber(leftObj?.local_ctime) ??
+				0;
+			const rightTime =
+				normalizeNumber(rightObj?.server_mtime) ??
+				normalizeNumber(rightObj?.local_mtime) ??
+				normalizeNumber(rightObj?.server_ctime) ??
+				normalizeNumber(rightObj?.local_ctime) ??
+				0;
+			compareResult = leftTime - rightTime;
+		}
+
+		return ascending ? compareResult : -compareResult;
+	});
+
+	return sortableEntries;
+}
+
+function filterTeraboxEntriesByCategory(entries: unknown[], categoryFilter: string): unknown[] {
+	if (!Array.isArray(entries) || categoryFilter === 'all') {
+		return Array.isArray(entries) ? entries : [];
+	}
+
+	const selectedCategory = normalizeNumber(categoryFilter);
+	if (selectedCategory === undefined) {
+		return entries;
+	}
+
+	return entries.filter((entry) => {
+		if (!entry || typeof entry !== 'object') {
+			return false;
+		}
+
+		const entryCategory = normalizeNumber((entry as IDataObject).category);
+		return entryCategory === selectedCategory;
+	});
+}
+
+function resolveTeraboxFileTypeLabel(
+	fromType: number | undefined,
+	category: number | undefined,
+	isDir: boolean,
+): string {
+	if (isDir) {
+		return 'Folder';
+	}
+
+	const categoryLabelMap: Record<number, string> = {
+		1: 'Videos',
+		2: 'Music',
+		3: 'Pictures',
+		4: 'Documents',
+		6: 'Others',
+	};
+
+	if (category !== undefined && categoryLabelMap[category]) {
+		return categoryLabelMap[category];
+	}
+
+	const fromTypeLabelMap: Record<number, string> = {
+		1: 'Pictures',
+		2: 'Music',
+		3: 'Videos',
+		4: 'Documents',
+		5: 'Others',
+		6: 'Others',
+		7: 'Others',
+	};
+
+	if (fromType !== undefined && fromTypeLabelMap[fromType]) {
+		return fromTypeLabelMap[fromType];
+	}
+
+	return 'Unknown';
 }
 
 function normalizeNumber(value: unknown): number | undefined {

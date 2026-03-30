@@ -94,11 +94,218 @@ export const fileFields: INodeProperties[] = [
         displayOptions: {
             show: {
                 resource: ['file'],
-                operation: ['list', 'search'],
+                operation: ['search'],
             },
         },
         default: false,
         description: 'Whether to return all results or only up to a given limit',
+    },
+    {
+        displayName: 'Mode',
+        name: 'listMode',
+        type: 'options',
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+            },
+        },
+        options: [
+            {
+                name: 'Limit',
+                value: 'limit',
+            },
+            {
+                name: 'Last Hours',
+                value: 'lastHours',
+            },
+            {
+                name: 'Last Days',
+                value: 'lastDays',
+            },
+            {
+                name: 'Date Range',
+                value: 'dateRange',
+            },
+        ],
+        default: 'limit',
+        description: 'Choose how list results should be limited.',
+    },
+    {
+        displayName: 'Limit',
+        name: 'listLimit',
+        type: 'number',
+        required: false,
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+                listMode: ['limit'],
+            },
+        },
+        typeOptions: {
+            minValue: 0,
+            maxValue: 10000,
+        },
+        default: 0,
+        description: 'Max number of list results to return. Leave empty or set 0 to return all available results.',
+    },
+    {
+        displayName: 'Last Hours',
+        name: 'lastHours',
+        type: 'number',
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+                listMode: ['lastHours'],
+            },
+        },
+        typeOptions: {
+            minValue: 1,
+        },
+        default: 24,
+        description: 'Return files changed within the last N hours.',
+    },
+    {
+        displayName: 'Last Days',
+        name: 'lastDays',
+        type: 'number',
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+                listMode: ['lastDays'],
+            },
+        },
+        typeOptions: {
+            minValue: 1,
+        },
+        default: 7,
+        description: 'Return files changed within the last N days.',
+    },
+    {
+        displayName: 'From Date',
+        name: 'fromDate',
+        type: 'dateTime',
+        required: true,
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+                listMode: ['dateRange'],
+            },
+        },
+        default: '',
+        description: 'Include files changed on or after this date and time.',
+    },
+    {
+        displayName: 'To Date',
+        name: 'toDate',
+        type: 'dateTime',
+        required: true,
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+                listMode: ['dateRange'],
+            },
+        },
+        default: '',
+        description: 'Include files changed on or before this date and time.',
+    },
+    {
+        displayName: 'Invert Output',
+        name: 'invertOutput',
+        type: 'boolean',
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+                listMode: ['lastHours', 'lastDays', 'dateRange'],
+            },
+        },
+        default: false,
+        description: 'When enabled, returns items outside the selected time filter instead of matching items.',
+    },
+    {
+        displayName: 'Category Filter',
+        name: 'categoryFilter',
+        type: 'options',
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list', 'search'],
+            },
+        },
+        options: [
+            {
+                name: 'All',
+                value: 'all',
+            },
+            {
+                name: 'Videos',
+                value: '1',
+            },
+            {
+                name: 'Music',
+                value: '2',
+            },
+            {
+                name: 'Pictures',
+                value: '3',
+            },
+            {
+                name: 'Documents',
+                value: '4',
+            },
+            {
+                name: 'Others',
+                value: '6',
+            },
+        ],
+        default: 'all',
+        description: 'Filter output items by TeraBox category.',
+    },
+    {
+        displayName: 'Sort By',
+        name: 'sortBy',
+        type: 'options',
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+            },
+        },
+        options: [
+            {
+                name: 'Change Time',
+                value: 'changeTime',
+            },
+            {
+                name: 'File Name',
+                value: 'fileName',
+            },
+            {
+                name: 'Size',
+                value: 'size',
+            },
+        ],
+        default: 'changeTime',
+        description: 'Sort output items by the selected field.',
+    },
+    {
+        displayName: 'Ascending',
+        name: 'sortAscending',
+        type: 'boolean',
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['list'],
+            },
+        },
+        default: true,
+        description: 'Whether sorting should be ascending (on) or descending (off).',
     },
     {
         displayName: 'Limit',
@@ -107,7 +314,7 @@ export const fileFields: INodeProperties[] = [
         displayOptions: {
             show: {
                 resource: ['file'],
-                operation: ['list', 'search'],
+                operation: ['search'],
                 returnAll: [false],
             },
         },
