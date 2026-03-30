@@ -6,11 +6,7 @@ import {
 	IHttpRequestOptions,
 	ILoadOptionsFunctions,
 } from 'n8n-workflow';
-import {
-	buildTeraboxHeaders,
-	buildTeraboxQuery,
-	getTeraboxSession,
-} from './SessionAuth';
+import { buildTeraboxHeaders, buildTeraboxQuery, getTeraboxSession } from './SessionAuth';
 
 type TeraboxContext = IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions;
 
@@ -38,7 +34,12 @@ export async function teraboxApiRequest(
 ): Promise<IDataObject> {
 	const responseData = await teraboxRequest.call(this, method, endpoint, body, qs, options);
 
-	if (typeof responseData !== 'object' || responseData === null || Array.isArray(responseData) || Buffer.isBuffer(responseData)) {
+	if (
+		typeof responseData !== 'object' ||
+		responseData === null ||
+		Array.isArray(responseData) ||
+		Buffer.isBuffer(responseData)
+	) {
 		throw new Error('TeraBox returned an unexpected non-JSON response.');
 	}
 
@@ -104,7 +105,10 @@ export async function teraboxRequest(
 		url,
 		headers: buildTeraboxHeaders(session),
 		json: !options.expectText && options.encoding !== 'arraybuffer',
-		qs: options.includeCommonQuery === false ? qs : buildTeraboxQuery(session, qs, { includeBdstoken: options.includeBdstoken }),
+		qs:
+			options.includeCommonQuery === false
+				? qs
+				: buildTeraboxQuery(session, qs, { includeBdstoken: options.includeBdstoken }),
 	} as IHttpRequestOptions & { form?: IDataObject };
 
 	if (Object.keys(body).length > 0) {

@@ -15,13 +15,15 @@ export const authenticationDescription: INodeProperties[] = [
 			{
 				name: '01. Start QR Login',
 				value: 'startQrLogin',
-				description: 'Create a TeraBox QR login session and return the QR code plus serialized login state',
+				description:
+					'Create a TeraBox QR login session and return the QR code plus serialized login state',
 				action: 'Start QR login',
 			},
 			{
 				name: '02. Check QR Login',
 				value: 'checkQrLogin',
-				description: 'Poll a previously started QR login session and return ndus/jsToken when confirmed',
+				description:
+					'Poll a previously started QR login session and return ndus/jsToken when confirmed',
 				action: 'Check QR login',
 			},
 			{
@@ -33,13 +35,15 @@ export const authenticationDescription: INodeProperties[] = [
 			{
 				name: 'Session Diagnostics',
 				value: 'sessionDiagnostics',
-				description: 'Return safe debug details about the resolved TeraBox session source and token availability',
+				description:
+					'Return safe debug details about the resolved TeraBox session source and token availability',
 				action: 'Get session diagnostics',
 			},
 			{
 				name: 'Validate Session',
 				value: 'validateSession',
-				description: 'Check whether the current browser session credential is valid and ready to use',
+				description:
+					'Check whether the current browser session credential is valid and ready to use',
 				action: 'Validate session',
 			},
 		],

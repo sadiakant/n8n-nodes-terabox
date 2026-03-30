@@ -29,6 +29,7 @@ Initiates a QR code login process for TeraBox authentication.
 | QR Login Language | String | No | `en` | Language for the QR login interface |
 
 **Output:**
+
 - `ok` - Boolean indicating success
 - `status` - Current status (`pending`, `scanned`, `success`)
 - `message` - Human-readable status message
@@ -37,6 +38,7 @@ Initiates a QR code login process for TeraBox authentication.
 - Binary output: QR code PNG image
 
 **Example Use Case:**
+
 1. Use Start QR Login to generate a QR code
 2. Display the QR code to the user
 3. User scans with TeraBox mobile app
@@ -55,6 +57,7 @@ Checks the status of a QR code login without completing it.
 | Login State JSON | JSON/String | Yes | - | The `loginStateJson` from Start QR Login |
 
 **Output:**
+
 - `ok` - Boolean indicating operation success
 - `status` - Login status (`pending`, `scanned`, `success`, `expired`)
 - `message` - Status description
@@ -74,6 +77,7 @@ Completes the QR code login and returns authentication credentials.
 | Login State JSON | JSON/String | Yes | - | The `loginStateJson` from Start QR Login |
 
 **Output:**
+
 - `status` - Final login status
 - `accountName` - User's account name
 - `cookieHeader` - Full Cookie header for authentication
@@ -94,6 +98,7 @@ Validates the current session and returns account information.
 **Parameters:** None
 
 **Output:**
+
 - `ok` - Boolean indicating session validity
 - `login` - Login status response
 - `account` - Account information
@@ -111,6 +116,7 @@ Returns detailed diagnostics about the current session.
 **Parameters:** None
 
 **Output:**
+
 - `ok` - Boolean indicating success
 - `session` - Detailed session information including:
   - Cookie validity
@@ -134,6 +140,7 @@ Retrieves user account information.
 **Parameters:** None
 
 **Output:**
+
 - User profile information
 - Account details
 - Registration information
@@ -149,6 +156,7 @@ Retrieves storage quota information.
 **Parameters:** None
 
 **Output:**
+
 - `quota` - Total storage quota in bytes
 - `used` - Used storage in bytes
 - `available` - Available storage in bytes
@@ -183,6 +191,7 @@ Lists files and folders in a directory with advanced filtering options.
 | Sort Ascending | Boolean | No | `true` | Sort direction |
 
 **Category Options:**
+
 - `all` - All files
 - `1` - Videos
 - `2` - Music
@@ -191,12 +200,14 @@ Lists files and folders in a directory with advanced filtering options.
 - `6` - Others
 
 **List Mode Options:**
+
 - `limit` - Return up to N items
 - `lastHours` - Items modified in last N hours
 - `lastDays` - Items modified in last N days
 - `dateRange` - Items within date range
 
 **Output per item:**
+
 - `fs_id` - File system ID
 - `path` - Full file path
 - `server_filename` - File name
@@ -243,6 +254,7 @@ Retrieves detailed metadata for files including download links.
 | Include Download Link | Boolean | No | `false` | Include download URLs |
 
 **Output:**
+
 - File metadata for each requested file
 - `dlink` - Direct download link (if requested)
 
@@ -260,6 +272,7 @@ Downloads a file from TeraBox.
 | Download Path | String | Yes | - | TeraBox file path to download |
 
 **Output:**
+
 - Binary data of the file
 - `fileName` - Original file name
 - `filePath` - Source file path
@@ -267,6 +280,7 @@ Downloads a file from TeraBox.
 - `size` - File size
 
 **Process:**
+
 1. Gets download link via `/api/filemetas`
 2. Downloads binary content from the link
 3. Returns file as binary attachment
@@ -286,15 +300,18 @@ Uploads a file to TeraBox.
 | Source URL | String | No | - | URL to download and upload |
 
 **Upload Source Options:**
+
 - `binary` - From n8n binary data
 - `url` - From external URL
 
 **Output:**
+
 - Upload confirmation
 - File metadata
 - Operation status
 
 **Process:**
+
 1. Gets binary data from specified source
 2. Uploads to TeraBox via multipart request
 3. Returns confirmation with file details
@@ -311,11 +328,13 @@ Deletes one or more files or folders.
 | File List | JSON/String | Yes | - | Array of file paths to delete |
 
 **File List Format:**
+
 ```json
 ["/path/to/file1.txt", "/path/to/folder"]
 ```
 
 **Output:**
+
 - Operation result
 - Task ID (for async operations)
 - Number of items processed
@@ -335,11 +354,13 @@ Copies files or folders to a new location.
 | File List | JSON/String | Yes | - | Items to copy |
 
 **File List Format:**
+
 ```json
 ["/path/to/file1.txt", "/path/to/folder"]
 ```
 
 **Output:**
+
 - Operation result
 - Task ID (for async operations)
 - Number of items processed
@@ -359,11 +380,13 @@ Moves files or folders to a new location.
 | File List | JSON/String | Yes | - | Items to move |
 
 **File List Format:**
+
 ```json
 ["/path/to/file1.txt", "/path/to/folder"]
 ```
 
 **Output:**
+
 - Operation result
 - Task ID (for async operations)
 - Number of items processed
@@ -383,16 +406,18 @@ Renames files or folders.
 | Rename To | String | No | - | New name (for single file rename) |
 
 **File List Format:**
+
 ```json
 [
-  {"path": "/old/name.txt", "newname": "new-name.txt"},
-  {"path": "/another/file.txt", "newName": "renamed.txt"}
+	{ "path": "/old/name.txt", "newname": "new-name.txt" },
+	{ "path": "/another/file.txt", "newName": "renamed.txt" }
 ]
 ```
 
 **Note:** Both `newname` and `newName` are accepted for compatibility.
 
 **Output:**
+
 - Operation result
 - `OldName` - Original file name(s)
 - `NewName` - New file name(s)
@@ -415,6 +440,7 @@ Activates the share functionality for the current account.
 **Parameters:** None
 
 **Output:**
+
 - Share activation status
 
 **API Endpoint:** `GET /share/webmaster/check`
@@ -432,6 +458,7 @@ Verifies a shared link with a password.
 | Password | String | Yes | - | Share link password |
 
 **Output:**
+
 - Verification result
 - Access tokens for the share
 
@@ -450,6 +477,7 @@ Queries information about a shared link.
 | Share Key | String | No | - | Security key (from verify) |
 
 **Output:**
+
 - Share information
 - File details
 - Access permissions
@@ -469,6 +497,7 @@ Lists files in a shared folder.
 | Share Key | String | Yes | - | Security key (from verify) |
 
 **Output:**
+
 - List of files and folders in the share
 - File metadata for each item
 
@@ -488,6 +517,7 @@ Copies files from a shared folder to your account.
 | FS ID List | String | Yes | - | Comma-separated file IDs |
 
 **Output:**
+
 - Copy operation result
 - Task ID for tracking
 
@@ -512,11 +542,13 @@ Gets streaming URL for a media file in your account.
 | Type | Options | Yes | - | Media type |
 
 **Type Options:**
+
 - `M3U8_AUTO_720` - Adaptive 720p streaming
 - `M3U8_AUTO_480` - Adaptive 480p streaming
 - `M3U8_AUTO_360` - Adaptive 360p streaming
 
 **Output:**
+
 - `m3u8` - M3U8 playlist URL for streaming
 
 **API Endpoint:** `GET /api/streaming`
@@ -537,6 +569,7 @@ Gets streaming URL for a media file in a shared folder.
 | Type | Options | Yes | - | Media type |
 
 **Output:**
+
 - `m3u8` - M3U8 playlist URL for streaming
 
 **API Endpoint:** `GET /share/streaming`
@@ -556,6 +589,7 @@ Gets media metadata for a shared file.
 | Share Key | String | Yes | - | Security key (from verify) |
 
 **Output:**
+
 - Media metadata
 - Duration, resolution, format information
 
@@ -589,19 +623,19 @@ All operations return a standardized output format:
 
 ### Operation Status Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `success` | Boolean | Whether operation succeeded |
-| `resource` | String | Resource type (file, user, etc.) |
-| `operation` | String | Operation name |
-| `summary` | String | Human-readable summary |
-| `timestamp` | String | ISO timestamp of operation |
-| `errno` | Number | TeraBox error code (0 = success) |
-| `requestId` | String | API request identifier |
-| `taskId` | String | Async task ID (if applicable) |
+| Field       | Type    | Description                        |
+| ----------- | ------- | ---------------------------------- |
+| `success`   | Boolean | Whether operation succeeded        |
+| `resource`  | String  | Resource type (file, user, etc.)   |
+| `operation` | String  | Operation name                     |
+| `summary`   | String  | Human-readable summary             |
+| `timestamp` | String  | ISO timestamp of operation         |
+| `errno`     | Number  | TeraBox error code (0 = success)   |
+| `requestId` | String  | API request identifier             |
+| `taskId`    | String  | Async task ID (if applicable)      |
 | `asyncTask` | Boolean | Whether this is an async operation |
-| `nextStep` | String | Instructions for async operations |
-| `itemCount` | Number | Number of items processed/returned |
+| `nextStep`  | String  | Instructions for async operations  |
+| `itemCount` | Number  | Number of items processed/returned |
 
 ---
 

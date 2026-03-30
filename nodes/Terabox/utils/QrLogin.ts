@@ -98,9 +98,7 @@ type StartQrLoginOptions = {
 	regSource?: string;
 };
 
-export async function startQrLogin(
-	options: StartQrLoginOptions = {},
-): Promise<IDataObject> {
+export async function startQrLogin(options: StartQrLoginOptions = {}): Promise<IDataObject> {
 	const initialLoginPageUrl = normalizeQrLoginPageUrl(options.loginPageUrl);
 	const lang = normalizeNonEmptyString(options.lang) ?? QR_LOGIN_DEFAULT_LANG;
 	const regSource = normalizeNonEmptyString(options.regSource) ?? QR_LOGIN_DEFAULT_REG_SOURCE;
@@ -126,7 +124,9 @@ export async function startQrLogin(
 	}
 
 	if (!tokens.pcfToken) {
-		throw new Error('QR login could not start because the TeraBox pcftoken could not be extracted.');
+		throw new Error(
+			'QR login could not start because the TeraBox pcftoken could not be extracted.',
+		);
 	}
 
 	const startResponse = await postQrApi<QrCodeStartPayload>({
@@ -360,10 +360,7 @@ function extractDataUrlPayload(dataUrl: string): string {
 
 function extractPageTokens(html: string): ExtractedPageTokens {
 	return {
-		bdstoken: extractFirstMatch(html, [
-			/"bdstoken":"([^"]+)"/,
-			/bdstoken=([A-Fa-f0-9]{16,128})/,
-		]),
+		bdstoken: extractFirstMatch(html, [/"bdstoken":"([^"]+)"/, /bdstoken=([A-Fa-f0-9]{16,128})/]),
 		jsToken: extractFirstMatch(html, [
 			/fn%28%22([A-Fa-f0-9]{32,512})%22%29/,
 			/fn\("([A-Fa-f0-9]{32,512})"\)/,
@@ -441,7 +438,9 @@ async function finalizeQrLoginSession(
 	}
 
 	if (!landingPageTokens.jsToken) {
-		throw new Error('QR login succeeded, but jsToken could not be extracted from the authenticated page.');
+		throw new Error(
+			'QR login succeeded, but jsToken could not be extracted from the authenticated page.',
+		);
 	}
 
 	state.cookies = { ...cookieJar };
@@ -475,10 +474,7 @@ async function finalizeQrLoginSession(
 	};
 }
 
-function buildCandidateLoginOrigins(
-	state: QrLoginState,
-	payload: QrCodeCheckPayload,
-): string[] {
+function buildCandidateLoginOrigins(state: QrLoginState, payload: QrCodeCheckPayload): string[] {
 	const origins = new Set<string>();
 	const preferredPrefixes = [
 		normalizeNonEmptyString(payload.region_domain_prefix),
@@ -598,7 +594,8 @@ async function httpRequestWithRetry(
 							) {
 								const redirectHeaders = { ...headers };
 								const redirectMethod =
-									statusCode === 303 || ((statusCode === 301 || statusCode === 302) && method === 'POST')
+									statusCode === 303 ||
+									((statusCode === 301 || statusCode === 302) && method === 'POST')
 										? 'GET'
 										: method;
 								delete redirectHeaders.Cookie;
@@ -636,7 +633,9 @@ async function httpRequestWithRetry(
 			);
 
 			request.on('timeout', () => {
-				request.destroy(new Error(`Request timed out after ${config.timeoutMs ?? QR_LOGIN_TIMEOUT_MS} ms`));
+				request.destroy(
+					new Error(`Request timed out after ${config.timeoutMs ?? QR_LOGIN_TIMEOUT_MS} ms`),
+				);
 			});
 			request.on('error', reject);
 

@@ -112,7 +112,11 @@ export class Terabox implements INodeType {
 						if (typeof responseData.qrCodePngBase64 === 'string' && responseData.qrCodePngBase64) {
 							const qrBuffer = Buffer.from(responseData.qrCodePngBase64, 'base64');
 							itemData.binary = {
-								qrCode: await this.helpers.prepareBinaryData(qrBuffer, 'terabox-qr.png', 'image/png'),
+								qrCode: await this.helpers.prepareBinaryData(
+									qrBuffer,
+									'terabox-qr.png',
+									'image/png',
+								),
 							};
 						}
 
@@ -207,14 +211,22 @@ export class Terabox implements INodeType {
 							const fromMs = Date.parse(fromDate);
 							const toMs = Date.parse(toDate);
 							if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
-								throw new NodeOperationError(this.getNode(), 'From Date and To Date must be valid dates.', {
-									itemIndex: i,
-								});
+								throw new NodeOperationError(
+									this.getNode(),
+									'From Date and To Date must be valid dates.',
+									{
+										itemIndex: i,
+									},
+								);
 							}
 							if (fromMs > toMs) {
-								throw new NodeOperationError(this.getNode(), 'From Date must be before or equal to To Date.', {
-									itemIndex: i,
-								});
+								throw new NodeOperationError(
+									this.getNode(),
+									'From Date must be before or equal to To Date.',
+									{
+										itemIndex: i,
+									},
+								);
 							}
 						}
 
@@ -247,7 +259,11 @@ export class Terabox implements INodeType {
 									toDate,
 									invertOutput,
 								});
-								const sortedEntries = sortTeraboxEntries(modeFilteredEntries, sortBy, sortAscending);
+								const sortedEntries = sortTeraboxEntries(
+									modeFilteredEntries,
+									sortBy,
+									sortAscending,
+								);
 								for (const entry of sortedEntries) {
 									returnData.push({
 										json: formatTeraboxListEntry(
@@ -275,16 +291,20 @@ export class Terabox implements INodeType {
 								: undefined;
 							const modeFilteredEntries = categoryFilteredEntries
 								? filterTeraboxEntriesByListMode(categoryFilteredEntries, {
-									listMode,
-									lastDays,
-									lastHours,
-									fromDate,
-									toDate,
-									invertOutput,
-								})
+										listMode,
+										lastDays,
+										lastHours,
+										fromDate,
+										toDate,
+										invertOutput,
+									})
 								: undefined;
 							if (modeFilteredEntries) {
-								const sortedEntries = sortTeraboxEntries(modeFilteredEntries, sortBy, sortAscending);
+								const sortedEntries = sortTeraboxEntries(
+									modeFilteredEntries,
+									sortBy,
+									sortAscending,
+								);
 								for (const entry of sortedEntries) {
 									returnData.push({
 										json: formatTeraboxListEntry(
@@ -308,9 +328,16 @@ export class Terabox implements INodeType {
 						const categoryFilter = this.getNodeParameter('categoryFilter', i, 'all') as string;
 						const firstPageSize = returnAll ? 1000 : (this.getNodeParameter('limit', i) as number);
 						const searchQs = { key, dir: '/', num: firstPageSize, page: 1, recursion: 1 };
-						const firstPageResponse = await teraboxApiRequest.call(this, 'GET', '/api/search', {}, searchQs, {
-							includeBdstoken: true,
-						});
+						const firstPageResponse = await teraboxApiRequest.call(
+							this,
+							'GET',
+							'/api/search',
+							{},
+							searchQs,
+							{
+								includeBdstoken: true,
+							},
+						);
 						const hasSearchArray =
 							Array.isArray(firstPageResponse.list) || Array.isArray(firstPageResponse.info);
 						if (!hasSearchArray) {
@@ -324,7 +351,10 @@ export class Terabox implements INodeType {
 						let allSearchEntries = extractTeraboxEntries(firstPageResponse) ?? [];
 						if (returnAll) {
 							let page = 2;
-							while (allSearchEntries.length !== 0 && allSearchEntries.length % firstPageSize === 0) {
+							while (
+								allSearchEntries.length !== 0 &&
+								allSearchEntries.length % firstPageSize === 0
+							) {
 								const pageQs = { key, dir: '/', num: firstPageSize, page, recursion: 1 };
 								const pagedResponse = await teraboxApiRequest.call(
 									this,
@@ -373,9 +403,16 @@ export class Terabox implements INodeType {
 							.map((value) => value.trim())
 							.filter(Boolean);
 						const qs = { dlink: dlink ? 1 : 0, target: JSON.stringify(targetArray) };
-						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/filemetas', {}, qs, {
-							includeBdstoken: true,
-						});
+						const responseData = await teraboxApiRequest.call(
+							this,
+							'GET',
+							'/api/filemetas',
+							{},
+							qs,
+							{
+								includeBdstoken: true,
+							},
+						);
 						returnData.push({
 							json: buildOperationOutput(resource, operation, responseData),
 							pairedItem: { item: i },
@@ -387,23 +424,33 @@ export class Terabox implements INodeType {
 						if (operation === 'delete') {
 							const filelistValue = this.getNodeParameter('filelist', i);
 							const parsedFilelist = parseJsonValue(filelistValue);
-							const listArray = (Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]) as Array<string | IDataObject>;
+							const listArray = (
+								Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]
+							) as Array<string | IDataObject>;
 							const pathList = listArray
 								.map((item) => (typeof item === 'string' ? item : (item.path as string)))
 								.filter((p) => typeof p === 'string' && p.trim() !== '');
 							if (pathList.length === 0) {
-								throw new NodeOperationError(this.getNode(), 'No valid file paths provided.', { itemIndex: i });
+								throw new NodeOperationError(this.getNode(), 'No valid file paths provided.', {
+									itemIndex: i,
+								});
 							}
 							filelistJson = JSON.stringify(pathList);
 						} else if (operation === 'copy' || operation === 'move') {
-							const destinationPath = (this.getNodeParameter('destinationPath', i) as string).trim();
+							const destinationPath = (
+								this.getNodeParameter('destinationPath', i) as string
+							).trim();
 							if (!destinationPath) {
-								throw new NodeOperationError(this.getNode(), 'Destination path is required.', { itemIndex: i });
+								throw new NodeOperationError(this.getNode(), 'Destination path is required.', {
+									itemIndex: i,
+								});
 							}
 
 							const filelistValue = this.getNodeParameter('filelist', i);
 							const parsedFilelist = parseJsonValue(filelistValue);
-							const listArray = (Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]) as Array<string | IDataObject>;
+							const listArray = (
+								Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]
+							) as Array<string | IDataObject>;
 							const objList = listArray
 								.map((item) => {
 									if (typeof item === 'string') {
@@ -427,14 +474,18 @@ export class Terabox implements INodeType {
 										(item.dest as string).trim() !== '',
 								);
 							if (objList.length === 0) {
-								throw new NodeOperationError(this.getNode(), 'No valid file paths provided.', { itemIndex: i });
+								throw new NodeOperationError(this.getNode(), 'No valid file paths provided.', {
+									itemIndex: i,
+								});
 							}
 							filelistJson = JSON.stringify(objList);
 						} else {
 							const renameTo = (this.getNodeParameter('renameTo', i, '') as string).trim();
 							const filelistValue = this.getNodeParameter('filelist', i);
 							const parsedFilelist = parseJsonValue(filelistValue);
-							const listArray = (Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]) as Array<string | IDataObject>;
+							const listArray = (
+								Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]
+							) as Array<string | IDataObject>;
 							const objList = listArray
 								.map((item) => {
 									if (typeof item === 'string') {
@@ -506,7 +557,8 @@ export class Terabox implements INodeType {
 								Cookie: session.cookieHeader,
 								Origin: session.baseUrl,
 								Referer: `${session.baseUrl}/main?category=all&path=%2F`,
-								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+								'User-Agent':
+									'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
 							},
 							qs: fmQs,
 							body: `filelist=${encodeURIComponent(filelistJson)}`,
@@ -538,7 +590,9 @@ export class Terabox implements INodeType {
 					} else if (operation === 'download') {
 						const downloadPath = this.getNodeParameter('downloadPath', i) as string;
 						if (!downloadPath.trim()) {
-							throw new NodeOperationError(this.getNode(), 'File path is required for download.', { itemIndex: i });
+							throw new NodeOperationError(this.getNode(), 'File path is required for download.', {
+								itemIndex: i,
+							});
 						}
 
 						// Step 1: Get the download link via filemetas
@@ -551,7 +605,9 @@ export class Terabox implements INodeType {
 							{ includeBdstoken: true },
 						);
 
-						const fileInfo = (metaResponse.info as IDataObject[] | undefined)?.[0] as IDataObject | undefined;
+						const fileInfo = (metaResponse.info as IDataObject[] | undefined)?.[0] as
+							| IDataObject
+							| undefined;
 						const dlink = fileInfo?.dlink as string | undefined;
 						if (!dlink) {
 							throw new NodeOperationError(
@@ -569,13 +625,17 @@ export class Terabox implements INodeType {
 							url: dlink,
 							headers: {
 								Cookie: session.cookieHeader,
-								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+								'User-Agent':
+									'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
 							},
 							encoding: 'arraybuffer',
 							returnFullResponse: true,
 						})) as { body: Buffer; headers: Record<string, string> };
 
-						const fileName = (confirmedFileInfo.server_filename as string) || downloadPath.split('/').pop() || 'download';
+						const fileName =
+							(confirmedFileInfo.server_filename as string) ||
+							downloadPath.split('/').pop() ||
+							'download';
 						const mimeType = binaryData.headers?.['content-type'] || 'application/octet-stream';
 						const binary = await this.helpers.prepareBinaryData(
 							Buffer.from(binaryData.body),
@@ -584,13 +644,18 @@ export class Terabox implements INodeType {
 						);
 
 						returnData.push({
-							json: buildOperationOutput(resource, operation, {
-								fileName,
-								filePath: downloadPath,
-								fs_id: confirmedFileInfo.fs_id,
-								mimeType,
-								size: confirmedFileInfo.size,
-							}, `File downloaded successfully: ${fileName}`),
+							json: buildOperationOutput(
+								resource,
+								operation,
+								{
+									fileName,
+									filePath: downloadPath,
+									fs_id: confirmedFileInfo.fs_id,
+									mimeType,
+									size: confirmedFileInfo.size,
+								},
+								`File downloaded successfully: ${fileName}`,
+							),
 							binary: { data: binary },
 							pairedItem: { item: i },
 						});
@@ -614,7 +679,9 @@ export class Terabox implements INodeType {
 							);
 						}
 
-						const uploadSource = (this.getNodeParameter('uploadSource', i, 'binary') as string).trim();
+						const uploadSource = (
+							this.getNodeParameter('uploadSource', i, 'binary') as string
+						).trim();
 
 						let binaryBuffer: Buffer;
 						let fileName: string;
@@ -622,9 +689,13 @@ export class Terabox implements INodeType {
 						if (uploadSource === 'url') {
 							const sourceUrl = (this.getNodeParameter('sourceUrl', i, '') as string).trim();
 							if (!sourceUrl) {
-								throw new NodeOperationError(this.getNode(), 'Source URL is required for URL upload.', {
-									itemIndex: i,
-								});
+								throw new NodeOperationError(
+									this.getNode(),
+									'Source URL is required for URL upload.',
+									{
+										itemIndex: i,
+									},
+								);
 							}
 
 							const sourceResponse = (await fetchExternalBinaryUrl.call(this, sourceUrl, i)) as {
@@ -639,15 +710,25 @@ export class Terabox implements INodeType {
 								sourceResponse.headers?.['content-disposition'],
 							);
 						} else {
-							const binaryPropertyInput = (this.getNodeParameter('binaryPropertyName', i, 'data') as string).trim();
+							const binaryPropertyInput = (
+								this.getNodeParameter('binaryPropertyName', i, 'data') as string
+							).trim();
 							if (!binaryPropertyInput) {
-								throw new NodeOperationError(this.getNode(), 'Binary Property is required for upload.', {
-									itemIndex: i,
-								});
+								throw new NodeOperationError(
+									this.getNode(),
+									'Binary Property is required for upload.',
+									{
+										itemIndex: i,
+									},
+								);
 							}
 
 							if (/^https?:\/\//i.test(binaryPropertyInput)) {
-								const sourceResponse = (await fetchExternalBinaryUrl.call(this, binaryPropertyInput, i)) as {
+								const sourceResponse = (await fetchExternalBinaryUrl.call(
+									this,
+									binaryPropertyInput,
+									i,
+								)) as {
 									body: Buffer;
 									headers?: Record<string, string>;
 								};
@@ -659,22 +740,22 @@ export class Terabox implements INodeType {
 									sourceResponse.headers?.['content-disposition'],
 								);
 							} else {
-							try {
-								binaryBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyInput);
-								const binaryData = this.helpers.assertBinaryData(i, binaryPropertyInput);
-								fileName =
-									(binaryData.fileName as string | undefined) ||
-									uploadPath.split('/').filter(Boolean).pop() ||
-									'upload.bin';
-								mimeType =
-									(binaryData.mimeType as string | undefined) || 'application/octet-stream';
-							} catch {
-								throw new NodeOperationError(
-									this.getNode(),
-									`Binary Property "${binaryPropertyInput}" was not found. Use a binary key like "data", or provide a direct file URL in this field.`,
-									{ itemIndex: i },
-								);
-							}
+								try {
+									binaryBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyInput);
+									const binaryData = this.helpers.assertBinaryData(i, binaryPropertyInput);
+									fileName =
+										(binaryData.fileName as string | undefined) ||
+										uploadPath.split('/').filter(Boolean).pop() ||
+										'upload.bin';
+									mimeType =
+										(binaryData.mimeType as string | undefined) || 'application/octet-stream';
+								} catch {
+									throw new NodeOperationError(
+										this.getNode(),
+										`Binary Property "${binaryPropertyInput}" was not found. Use a binary key like "data", or provide a direct file URL in this field.`,
+										{ itemIndex: i },
+									);
+								}
 							}
 						}
 
@@ -732,7 +813,13 @@ export class Terabox implements INodeType {
 						const shorturl = this.getNodeParameter('shorturl', i) as string;
 						const sekey = this.getNodeParameter('sekey', i, '') as string;
 						const qs = { root: 1, sekey, shorturl: normalizeShorturl(shorturl) };
-						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/shorturlinfo', {}, qs);
+						const responseData = await teraboxApiRequest.call(
+							this,
+							'GET',
+							'/api/shorturlinfo',
+							{},
+							qs,
+						);
 						returnData.push({
 							json: buildOperationOutput(resource, operation, responseData),
 							pairedItem: { item: i },
@@ -740,7 +827,13 @@ export class Terabox implements INodeType {
 					} else if (operation === 'list') {
 						const shorturl = this.getNodeParameter('shorturl', i) as string;
 						const sekey = this.getNodeParameter('sekey', i) as string;
-						const qs = { num: 1000, page: 1, root: 1, sekey, shorturl: normalizeShorturl(shorturl) };
+						const qs = {
+							num: 1000,
+							page: 1,
+							root: 1,
+							sekey,
+							shorturl: normalizeShorturl(shorturl),
+						};
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/share/list', {}, qs);
 						returnData.push({
 							json: buildOperationOutput(resource, operation, responseData),
@@ -756,9 +849,16 @@ export class Terabox implements INodeType {
 							.filter(Boolean);
 						const qs = { async: 1, from: uk, ondup: 'newcopy', shareid };
 						const body = { fsidlist: JSON.stringify(fsidlist), path: '/' };
-						const responseData = await teraboxApiRequest.call(this, 'POST', '/share/transfer', body, qs, {
-							includeBdstoken: true,
-						});
+						const responseData = await teraboxApiRequest.call(
+							this,
+							'POST',
+							'/share/transfer',
+							body,
+							qs,
+							{
+								includeBdstoken: true,
+							},
+						);
 						returnData.push({
 							json: buildOperationOutput(resource, operation, responseData),
 							pairedItem: { item: i },
@@ -810,9 +910,16 @@ export class Terabox implements INodeType {
 						const uk = this.getNodeParameter('uk', i) as string;
 						const sekey = this.getNodeParameter('sekey', i) as string;
 						const qs = { fid, sekey, shareid, timestamp: Date.now(), uk };
-						const responseData = await teraboxApiRequest.call(this, 'GET', '/share/mediameta', {}, qs, {
-							includeBdstoken: true,
-						});
+						const responseData = await teraboxApiRequest.call(
+							this,
+							'GET',
+							'/share/mediameta',
+							{},
+							qs,
+							{
+								includeBdstoken: true,
+							},
+						);
 						returnData.push({
 							json: buildOperationOutput(resource, operation, responseData),
 							pairedItem: { item: i },
@@ -918,8 +1025,11 @@ function formatCompleteQrLoginOutput(responseData: IDataObject): IDataObject {
 			jsToken: responseData.jsToken,
 			bdstoken: responseData.bdstoken,
 			baseUrl: responseData.baseUrl,
-			cookieExpiryDate: responseData.cookieExpiry ? new Date(responseData.cookieExpiry as number).toISOString() : 'Not explicitly provided by API (Session typically lasts ~30 days)',
-			importantNote: 'IMPORTANT: Save these Cookies to Local PC or Other safe Place for Fillup in future credentials.',
+			cookieExpiryDate: responseData.cookieExpiry
+				? new Date(responseData.cookieExpiry as number).toISOString()
+				: 'Not explicitly provided by API (Session typically lasts ~30 days)',
+			importantNote:
+				'IMPORTANT: Save these Cookies to Local PC or Other safe Place for Fillup in future credentials.',
 			loginStateJson: responseData.loginStateJson,
 		};
 	}

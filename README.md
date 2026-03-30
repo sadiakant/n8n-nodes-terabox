@@ -126,13 +126,13 @@ For detailed documentation of all operations with parameters, examples, and use 
 
 ## 🔧 Available Operations
 
-| Resource       | Operations                                                                                              |
-| -------------- | ------------------------------------------------------------------------------------------------------- |
-| **Authentication** | Start QR Login, Check QR Login, Complete QR Login, Validate Session, Session Diagnostics             |
-| **User**           | Get Info, Get Quota                                                                                 |
-| **File**           | List, Search, Get Metadata, Download, Upload, Delete, Copy, Move, Rename                            |
-| **Share**          | Activate, Verify, Query, List, Copy                                                                 |
-| **Media**          | Stream URL, Share Stream URL, Metadata                                                              |
+| Resource           | Operations                                                                               |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| **Authentication** | Start QR Login, Check QR Login, Complete QR Login, Validate Session, Session Diagnostics |
+| **User**           | Get Info, Get Quota                                                                      |
+| **File**           | List, Search, Get Metadata, Download, Upload, Delete, Copy, Move, Rename                 |
+| **Share**          | Activate, Verify, Query, List, Copy                                                      |
+| **Media**          | Stream URL, Share Stream URL, Metadata                                                   |
 
 ## 🛡️ Security Features
 
@@ -186,13 +186,13 @@ All operations return consistent output format:
 
 ```json
 {
-  "success": true,
-  "operationStatus": {
-    "resource": "file",
-    "operation": "list",
-    "summary": "List completed successfully. Returned 25 items.",
-    "timestamp": "2026-03-31T00:00:00.000Z"
-  }
+	"success": true,
+	"operationStatus": {
+		"resource": "file",
+		"operation": "list",
+		"summary": "List completed successfully. Returned 25 items.",
+		"timestamp": "2026-03-31T00:00:00.000Z"
+	}
 }
 ```
 
@@ -202,13 +202,12 @@ For comprehensive troubleshooting guidance, common issues, and solutions, see ou
 
 ### Quick Fixes
 
-| Issue | Solution |
-|-------|----------|
-| Session expired | Re-authenticate using QR Login |
-| File not found | Use exact path from File > List |
-| Upload failed | Check storage quota and file size |
-| Invalid credentials | Re-copy cookie and jsToken |
-
+| Issue               | Solution                          |
+| ------------------- | --------------------------------- |
+| Session expired     | Re-authenticate using QR Login    |
+| File not found      | Use exact path from File > List   |
+| Upload failed       | Check storage quota and file size |
+| Invalid credentials | Re-copy cookie and jsToken        |
 
 ## 📚 Documentation
 
@@ -219,21 +218,25 @@ For comprehensive troubleshooting guidance, common issues, and solutions, see ou
 ## Use Cases
 
 ### **Automated File Management**
+
 - Sync files between TeraBox and other cloud services
 - Organize files by category or date
 - Clean up old files automatically
 
 ### **Media Processing**
+
 - Get streaming URLs for video processing
 - Download media files for transcoding
 - List and filter media by type
 
 ### **Backup Workflows**
+
 - Download files for local backup
 - Copy files between TeraBox accounts
 - Monitor storage quota
 
 ### **Share Management**
+
 - Access shared folder contents
 - Copy files from shared links
 - Query share information
@@ -243,6 +246,7 @@ For comprehensive troubleshooting guidance, common issues, and solutions, see ou
 ### **Category Filters**
 
 Use numeric codes for file categories:
+
 - `1` - Videos
 - `2` - Music
 - `3` - Pictures
@@ -252,6 +256,7 @@ Use numeric codes for file categories:
 ### **Date Range Filtering**
 
 Filter files by modification time:
+
 - **Last Hours**: Items modified in last N hours
 - **Last Days**: Items modified in last N days
 - **Custom Range**: From/To date in ISO format
@@ -259,6 +264,7 @@ Filter files by modification time:
 ### **Batch Operations**
 
 Process multiple files at once:
+
 ```json
 ["/path/to/file1.txt", "/path/to/file2.txt"]
 ```
@@ -266,6 +272,7 @@ Process multiple files at once:
 ### **URL Uploads**
 
 Upload files directly from URLs:
+
 1. Set Upload Source to `URL`
 2. Provide the source URL
 3. Node downloads and uploads automatically
@@ -298,6 +305,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 </div>
 
 ### **Publishing Status**
+
 [![Build Status](https://github.com/sadiakant/n8n-nodes-terabox/actions/workflows/build.yml/badge.svg)](https://github.com/sadiakant/n8n-nodes-terabox/actions/workflows/build.yml)
 [![Publish Status](https://github.com/sadiakant/n8n-nodes-terabox/actions/workflows/publish.yml/badge.svg)](https://github.com/sadiakant/n8n-nodes-terabox/actions/workflows/publish.yml)
 [![Socket Badge](https://badge.socket.dev/npm/package/n8n-nodes-terabox)](https://badge.socket.dev/npm/package/n8n-nodes-terabox)

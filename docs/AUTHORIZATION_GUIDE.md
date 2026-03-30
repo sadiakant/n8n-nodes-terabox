@@ -89,6 +89,7 @@ The QR Code Login method is the easiest and most secure way to authenticate. It 
 5. Execute the node
 
 The node will return your authentication credentials:
+
 - `cookieHeader` - The full Cookie header string
 - `jsToken` - The JavaScript token
 - `bdstoken` - The BDS token (for file operations)
@@ -121,6 +122,7 @@ You can use the **Check QR Login** operation to poll the login status without co
 3. Pass the `loginStateJson` from the Start QR Login output
 
 The status will be one of:
+
 - `pending` - QR code not yet scanned
 - `scanned` - User has scanned but not confirmed
 - `success` - Login completed successfully
@@ -193,6 +195,7 @@ After configuring your credentials, you can validate them:
 5. Execute the node
 
 The node will return:
+
 - Login status confirmation
 - Account information
 - Storage quota details
@@ -215,21 +218,25 @@ This is useful for troubleshooting authentication issues.
 ## Credential Fields Reference
 
 ### Cookie Header (Required)
+
 - **Type**: Password field
 - **Description**: Full Cookie request header from an authenticated TeraBox web request
 - **Example**: `BAIDUID=xxx; BIDUPSID=xxx; PSTM=xxx; ...`
 
 ### JS Token (Required)
+
 - **Type**: Password field
 - **Description**: The jsToken query parameter from an authenticated request
 - **Example**: `A21DBF1B7C3F4E5D6A8B9C0D1E2F3A4B`
 
 ### BDSToken (Optional)
+
 - **Type**: Password field
 - **Description**: Used by file management and share copy operations
 - **Example**: `1234567890abcdef1234567890abcdef`
 
 ### Base URL (Optional)
+
 - **Type**: String field
 - **Default**: `https://dm.nephobox.com`
 - **Description**: Override for the web API host if needed
@@ -249,14 +256,17 @@ This is useful for troubleshooting authentication issues.
 ## Common Authentication Issues
 
 ### Session Expired
+
 - **Cause**: Cookies have expired (typically after 30 days)
 - **Solution**: Re-authenticate using QR login or manual cookie extraction
 
 ### Invalid Credentials
+
 - **Cause**: Incorrect cookie or token values
 - **Solution**: Re-copy credentials carefully, ensuring no extra spaces or characters
 
 ### Token Mismatch
+
 - **Cause**: Using cookies and tokens from different sessions
 - **Solution**: Ensure all credentials are from the same authenticated session
 

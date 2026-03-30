@@ -1,8 +1,4 @@
-import {
-	IDataObject,
-	IExecuteFunctions,
-	NodeOperationError,
-} from 'n8n-workflow';
+import { IDataObject, IExecuteFunctions, NodeOperationError } from 'n8n-workflow';
 import { createHash } from 'crypto';
 import { request as httpsRequest } from 'https';
 import { getTeraboxSession } from './SessionAuth';
@@ -93,9 +89,13 @@ export async function uploadTeraboxFile(
 
 	const uploadId = String(precreateResponse.uploadid ?? '');
 	if (!uploadId) {
-		throw new NodeOperationError(this.getNode(), 'TeraBox upload precreate did not return uploadid.', {
-			itemIndex,
-		});
+		throw new NodeOperationError(
+			this.getNode(),
+			'TeraBox upload precreate did not return uploadid.',
+			{
+				itemIndex,
+			},
+		);
 	}
 	if (getPrecreateReturnType(precreateResponse) === 2) {
 		return {
@@ -218,9 +218,13 @@ async function requestWith405Fallback(
 	} catch (error) {
 		const statusCode = getErrorStatusCode(error);
 		if (statusCode !== 405) {
-			throw new NodeOperationError(this.getNode(), `TeraBox ${step} request failed: ${getErrorMessage(error)}`, {
-				itemIndex,
-			});
+			throw new NodeOperationError(
+				this.getNode(),
+				`TeraBox ${step} request failed: ${getErrorMessage(error)}`,
+				{
+					itemIndex,
+				},
+			);
 		}
 	}
 
@@ -260,7 +264,11 @@ async function uploadChunksWithFallback(
 	},
 	itemIndex: number,
 ): Promise<string[]> {
-	const hosts = buildUploadHostCandidates(params.baseUrl, params.locateHosts, params.precreateHosts);
+	const hosts = buildUploadHostCandidates(
+		params.baseUrl,
+		params.locateHosts,
+		params.precreateHosts,
+	);
 	const uploadedChunkMd5s: string[] = [];
 
 	for (let partseq = 0; partseq < params.uploadChunks.length; partseq += 1) {
@@ -372,7 +380,11 @@ function buildUploadRequestVariants(params: {
 }
 
 function getErrorStatusCode(error: unknown): number | undefined {
-	const candidate = error as { statusCode?: unknown; httpCode?: unknown; response?: { statusCode?: unknown } };
+	const candidate = error as {
+		statusCode?: unknown;
+		httpCode?: unknown;
+		response?: { statusCode?: unknown };
+	};
 	const value = candidate?.statusCode ?? candidate?.httpCode ?? candidate?.response?.statusCode;
 	if (typeof value === 'number' && Number.isFinite(value)) {
 		return value;
@@ -400,13 +412,13 @@ function omitHeader(headers: IDataObject, headerName: string): IDataObject {
 	return nextHeaders;
 }
 
-function buildUploadHostCandidates(baseUrl: string, locateHosts: string[], precreateHosts: string[]): string[] {
+function buildUploadHostCandidates(
+	baseUrl: string,
+	locateHosts: string[],
+	precreateHosts: string[],
+): string[] {
 	const regionalHosts = deriveRegionalUploadHosts(baseUrl);
-	const candidates = [
-		...locateHosts,
-		...precreateHosts,
-		...regionalHosts,
-	];
+	const candidates = [...locateHosts, ...precreateHosts, ...regionalHosts];
 
 	const seen = new Set<string>();
 	const normalized: string[] = [];
@@ -638,7 +650,12 @@ async function postUploadChunk(params: {
 	fileName: string;
 }): Promise<IDataObject> {
 	const boundary = `----n8nTerabox${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-	const multipartBody = buildMultipartBody(boundary, params.buffer, params.mimeType, params.fileName);
+	const multipartBody = buildMultipartBody(
+		boundary,
+		params.buffer,
+		params.mimeType,
+		params.fileName,
+	);
 	const url = new URL(`${params.host}/rest/2.0/pcs/superfile2`);
 	url.search = new URLSearchParams(stringifyQueryParams(params.qs)).toString();
 
@@ -661,17 +678,26 @@ async function postUploadChunk(params: {
 	});
 
 	if (response.statusCode !== 200) {
-		throw new Error(`Request failed with status code ${response.statusCode}${response.bodyText ? `: ${response.bodyText}` : ''}`);
+		throw new Error(
+			`Request failed with status code ${response.statusCode}${response.bodyText ? `: ${response.bodyText}` : ''}`,
+		);
 	}
 
 	try {
 		return JSON.parse(response.bodyText) as IDataObject;
 	} catch (error) {
-		throw new Error(`Upload response was not valid JSON: ${getErrorMessage(error)}${response.bodyText ? ` | ${response.bodyText}` : ''}`);
+		throw new Error(
+			`Upload response was not valid JSON: ${getErrorMessage(error)}${response.bodyText ? ` | ${response.bodyText}` : ''}`,
+		);
 	}
 }
 
-function buildMultipartBody(boundary: string, buffer: Buffer, mimeType: string, fileName: string): Buffer {
+function buildMultipartBody(
+	boundary: string,
+	buffer: Buffer,
+	mimeType: string,
+	fileName: string,
+): Buffer {
 	const safeFileName = (fileName || 'blob').replace(/"/g, '');
 	const header =
 		`--${boundary}\r\n` +
@@ -682,9 +708,7 @@ function buildMultipartBody(boundary: string, buffer: Buffer, mimeType: string, 
 }
 
 function stringifyQueryParams(qs: IDataObject): Record<string, string> {
-	return Object.fromEntries(
-		Object.entries(qs).map(([key, value]) => [key, String(value)]),
-	);
+	return Object.fromEntries(Object.entries(qs).map(([key, value]) => [key, String(value)]));
 }
 
 async function sendHttpsRequest(params: {

@@ -178,35 +178,31 @@ npm run format
 import { IExecuteFunctions, INodeExecutionData } from 'n8n-workflow';
 
 export async function exampleOperation(
-  this: IExecuteFunctions,
-  itemIndex: number,
+	this: IExecuteFunctions,
+	itemIndex: number,
 ): Promise<INodeExecutionData> {
-  try {
-    const param = this.getNodeParameter('param', itemIndex) as string;
-    
-    if (!param) {
-      throw new NodeOperationError(
-        this.getNode(),
-        'Parameter is required',
-        { itemIndex },
-      );
-    }
-    
-    const result = await someApiCall(param);
-    
-    return {
-      json: { success: true, data: result },
-      pairedItem: { item: itemIndex },
-    };
-  } catch (error) {
-    if (this.continueOnFail()) {
-      return {
-        json: { success: false, error: error.message },
-        pairedItem: { item: itemIndex },
-      };
-    }
-    throw error;
-  }
+	try {
+		const param = this.getNodeParameter('param', itemIndex) as string;
+
+		if (!param) {
+			throw new NodeOperationError(this.getNode(), 'Parameter is required', { itemIndex });
+		}
+
+		const result = await someApiCall(param);
+
+		return {
+			json: { success: true, data: result },
+			pairedItem: { item: itemIndex },
+		};
+	} catch (error) {
+		if (this.continueOnFail()) {
+			return {
+				json: { success: false, error: error.message },
+				pairedItem: { item: itemIndex },
+			};
+		}
+		throw error;
+	}
 }
 ```
 
@@ -287,19 +283,15 @@ import { IExecuteFunctions, INodeExecutionData } from 'n8n-workflow';
 import { teraboxApiRequest } from '../utils/api';
 
 export async function newOperation(
-  this: IExecuteFunctions,
-  itemIndex: number,
+	this: IExecuteFunctions,
+	itemIndex: number,
 ): Promise<INodeExecutionData> {
-  const result = await teraboxApiRequest.call(
-    this,
-    'GET',
-    '/api/endpoint',
-  );
-  
-  return {
-    json: result,
-    pairedItem: { item: itemIndex },
-  };
+	const result = await teraboxApiRequest.call(this, 'GET', '/api/endpoint');
+
+	return {
+		json: result,
+		pairedItem: { item: itemIndex },
+	};
 }
 ```
 

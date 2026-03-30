@@ -18,16 +18,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Session Expired
 
 **Error Messages:**
+
 - "Session expired"
 - "Authentication failed"
 - "Unauthorized"
 
 **Causes:**
+
 - Cookies have expired (typically after 30 days)
 - Session tokens are no longer valid
 - Account was logged out from another device
 
 **Solutions:**
+
 1. Re-authenticate using QR Login:
    - Use **Start QR Login** operation
    - Scan QR code with TeraBox mobile app
@@ -40,6 +43,7 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
    - Update your n8n credentials
 
 **Prevention:**
+
 - Regularly check session validity using **Validate Session**
 - Monitor session expiration dates
 - Set up automated session renewal workflows
@@ -49,17 +53,20 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Invalid Credentials
 
 **Error Messages:**
+
 - "Invalid cookie"
 - "Invalid jsToken"
 - "Authentication check failed"
 
 **Causes:**
+
 - Incorrect cookie or token values
 - Extra whitespace or special characters
 - Copying from wrong request
 - Credentials from different sessions
 
 **Solutions:**
+
 1. Re-copy credentials carefully:
    - Ensure no leading/trailing spaces
    - Copy the entire Cookie header value
@@ -78,16 +85,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### QR Login Not Working
 
 **Error Messages:**
+
 - "QR code expired"
 - "Login timeout"
 - "Scan failed"
 
 **Causes:**
+
 - QR code expired (typically after 5 minutes)
 - Network issues during scan
 - TeraBox app version incompatibility
 
 **Solutions:**
+
 1. Generate a new QR code:
    - Use **Start QR Login** again
    - Scan immediately after generation
@@ -105,16 +115,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Token Mismatch
 
 **Error Messages:**
+
 - "Token validation failed"
 - "BDSToken required"
 - "Permission denied"
 
 **Causes:**
+
 - Using bdstoken from different session
 - Missing bdstoken for file operations
 - Token format incorrect
 
 **Solutions:**
+
 1. Get fresh bdstoken:
    - Complete QR login to get new bdstoken
    - Ensure bdstoken matches your session
@@ -130,17 +143,20 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### File Not Found
 
 **Error Messages:**
+
 - "File not found"
 - "Path does not exist"
 - "No such file or directory"
 
 **Causes:**
+
 - Incorrect file path
 - File was deleted or moved
 - Case sensitivity issues
 - Special characters in path
 
 **Solutions:**
+
 1. Verify file path:
    - Use exact path from TeraBox
    - Check for typos
@@ -159,16 +175,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Permission Denied
 
 **Error Messages:**
+
 - "Permission denied"
 - "Access forbidden"
 - "Operation not allowed"
 
 **Causes:**
+
 - Insufficient permissions
 - File is locked
 - Account restrictions
 
 **Solutions:**
+
 1. Check file permissions:
    - Ensure you own the file
    - Verify account has write access
@@ -182,15 +201,18 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Category Filter Not Working
 
 **Error Messages:**
+
 - "Invalid category"
 - "No files found"
 
 **Causes:**
+
 - Incorrect category number
 - No files in category
 - Category filter applied incorrectly
 
 **Solutions:**
+
 1. Use correct category numbers:
    - 1 = Videos
    - 2 = Music
@@ -207,15 +229,18 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Large File List Timeout
 
 **Error Messages:**
+
 - "Request timeout"
 - "Operation timed out"
 
 **Causes:**
+
 - Too many files in directory
 - Network latency
 - Server load
 
 **Solutions:**
+
 1. Use pagination:
    - Set lower `List Limit`
    - Process files in batches
@@ -235,17 +260,20 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Upload Failed
 
 **Error Messages:**
+
 - "Upload failed"
 - "File too large"
 - "Storage quota exceeded"
 
 **Causes:**
+
 - File exceeds size limit
 - Insufficient storage
 - Network interruption
 - Invalid file format
 
 **Solutions:**
+
 1. Check file size:
    - TeraBox has upload size limits
    - Compress large files
@@ -267,17 +295,20 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Download Failed
 
 **Error Messages:**
+
 - "Download failed"
 - "Download link expired"
 - "File unavailable"
 
 **Causes:**
+
 - Download link expired
 - File is corrupted
 - Network issues
 - File permissions
 
 **Solutions:**
+
 1. Get fresh download link:
    - Use **File > Get Metadata** with dlink option
    - Download immediately after getting link
@@ -295,17 +326,20 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### URL Upload Not Working
 
 **Error Messages:**
+
 - "Failed to download source URL"
 - "Invalid URL"
 - "URL download failed"
 
 **Causes:**
+
 - URL is invalid or expired
 - Source server blocks downloads
 - CORS restrictions
 - Network issues
 
 **Solutions:**
+
 1. Verify URL:
    - Test URL in browser
    - Ensure URL is accessible
@@ -326,17 +360,20 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Share Link Invalid
 
 **Error Messages:**
+
 - "Invalid share link"
 - "Share not found"
 - "Link expired"
 
 **Causes:**
+
 - Incorrect share URL
 - Share was deleted
 - Share link expired
 - Wrong share format
 
 **Solutions:**
+
 1. Verify share link:
    - Check link is complete
    - Ensure no truncation
@@ -354,16 +391,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Share Password Required
 
 **Error Messages:**
+
 - "Password required"
 - "Invalid password"
 - "Access denied"
 
 **Causes:**
+
 - Password-protected share
 - Incorrect password
 - Password not provided
 
 **Solutions:**
+
 1. Get correct password:
    - Ask share owner for password
    - Check for typos
@@ -377,16 +417,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Cannot Copy from Share
 
 **Error Messages:**
+
 - "Copy failed"
 - "Transfer error"
 - "Permission denied"
 
 **Causes:**
+
 - Share doesn't allow copying
 - Insufficient storage
 - Invalid file IDs
 
 **Solutions:**
+
 1. Check share permissions:
    - Some shares are view-only
    - Verify copy is allowed
@@ -406,17 +449,20 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Stream URL Not Working
 
 **Error Messages:**
+
 - "Streaming failed"
 - "Invalid stream URL"
 - "Media not available"
 
 **Causes:**
+
 - File is not a media file
 - Unsupported format
 - Network issues
 - Regional restrictions
 
 **Solutions:**
+
 1. Verify file type:
    - Ensure file is video/audio
    - Check format is supported
@@ -434,16 +480,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### M3U8 Playback Issues
 
 **Error Messages:**
+
 - "Playlist load failed"
 - "Playback error"
 - "Segment not found"
 
 **Causes:**
+
 - Invalid M3U8 URL
 - Network issues
 - Player incompatibility
 
 **Solutions:**
+
 1. Verify M3U8 URL:
    - Test URL in VLC or similar player
    - Check URL is accessible
@@ -463,16 +512,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Request Timeout
 
 **Error Messages:**
+
 - "Request timeout"
 - "ETIMEDOUT"
 - "Connection timeout"
 
 **Causes:**
+
 - Network latency
 - Server overload
 - Large request size
 
 **Solutions:**
+
 1. Retry request:
    - Timeouts are often temporary
    - Wait and try again
@@ -490,16 +542,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Rate Limited
 
 **Error Messages:**
+
 - "Too many requests"
 - "Rate limit exceeded"
 - "Slow down"
 
 **Causes:**
+
 - Too many API calls
 - Request frequency too high
 - Server protection
 
 **Solutions:**
+
 1. Add delays:
    - Wait between requests
    - Use workflow delays
@@ -517,16 +572,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Network Error
 
 **Error Messages:**
+
 - "Network error"
 - "ECONNREFUSED"
 - "DNS resolution failed"
 
 **Causes:**
+
 - Internet connection issues
 - DNS problems
 - Firewall blocking
 
 **Solutions:**
+
 1. Check internet:
    - Verify connection works
    - Test other websites
@@ -544,16 +602,19 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 ### Unexpected Response
 
 **Error Messages:**
+
 - "Invalid JSON response"
 - "Unexpected token"
 - "Parse error"
 
 **Causes:**
+
 - Server error
 - API changes
 - Proxy interference
 
 **Solutions:**
+
 1. Check response:
    - Look at raw response
    - Identify error message
@@ -620,17 +681,17 @@ If you're still experiencing issues:
 
 ## Error Code Reference
 
-| Error Code | Description | Solution |
-|------------|-------------|----------|
-| -6 | Invalid parameter | Check parameter values |
-| -7 | No permission | Verify file/account permissions |
-| -9 | File not found | Check file path |
-| -10 | Access denied | Re-authenticate |
-| -11 | Service unavailable | Wait and retry |
-| -12 | Upload failed | Check file size/quota |
-| -13 | Download failed | Get fresh download link |
-| -14 | Share not found | Verify share link |
-| -15 | Invalid password | Check share password |
+| Error Code | Description         | Solution                        |
+| ---------- | ------------------- | ------------------------------- |
+| -6         | Invalid parameter   | Check parameter values          |
+| -7         | No permission       | Verify file/account permissions |
+| -9         | File not found      | Check file path                 |
+| -10        | Access denied       | Re-authenticate                 |
+| -11        | Service unavailable | Wait and retry                  |
+| -12        | Upload failed       | Check file size/quota           |
+| -13        | Download failed     | Get fresh download link         |
+| -14        | Share not found     | Verify share link               |
+| -15        | Invalid password    | Check share password            |
 
 ---
 
