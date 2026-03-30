@@ -89,6 +89,7 @@ export class Terabox implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
+		const globalSearchSeen = new Set<string>();
 
 		for (let i = 0; i < items.length; i++) {
 			try {
@@ -304,32 +305,62 @@ export class Terabox implements INodeType {
 						const key = this.getNodeParameter('key', i) as string;
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const categoryFilter = this.getNodeParameter('categoryFilter', i, 'all') as string;
-						const limit = returnAll ? 10000 : (this.getNodeParameter('limit', i) as number);
-						const qs = { key, num: limit, page: 1, recursion: 1 };
-						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/search', {}, qs, {
+						const firstPageSize = returnAll ? 1000 : (this.getNodeParameter('limit', i) as number);
+						const searchQs = { key, dir: '/', num: firstPageSize, page: 1, recursion: 1 };
+						const firstPageResponse = await teraboxApiRequest.call(this, 'GET', '/api/search', {}, searchQs, {
 							includeBdstoken: true,
 						});
-						const hasSearchArray = Array.isArray(responseData.list) || Array.isArray(responseData.info);
-						const rawSearchEntries: unknown[] = Array.isArray(responseData.list)
-							? (responseData.list as unknown[])
-							: Array.isArray(responseData.info)
-								? (responseData.info as unknown[])
-								: [];
-						const searchEntries = filterTeraboxEntriesByCategory(rawSearchEntries, categoryFilter);
-						if (hasSearchArray) {
-							for (const entry of searchEntries) {
-								returnData.push({
-									json: formatTeraboxListEntry(
-										entry && typeof entry === 'object'
-											? (entry as IDataObject)
-											: ({ value: entry } as IDataObject),
-									),
-									pairedItem: { item: i },
-								});
-							}
-						} else {
+						const hasSearchArray =
+							Array.isArray(firstPageResponse.list) || Array.isArray(firstPageResponse.info);
+						if (!hasSearchArray) {
 							returnData.push({
-								json: buildOperationOutput(resource, operation, responseData),
+								json: buildOperationOutput(resource, operation, firstPageResponse),
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+
+						let allSearchEntries = extractTeraboxEntries(firstPageResponse) ?? [];
+						if (returnAll) {
+							let page = 2;
+							while (allSearchEntries.length !== 0 && allSearchEntries.length % firstPageSize === 0) {
+								const pageQs = { key, dir: '/', num: firstPageSize, page, recursion: 1 };
+								const pagedResponse = await teraboxApiRequest.call(
+									this,
+									'GET',
+									'/api/search',
+									{},
+									pageQs,
+									{ includeBdstoken: true },
+								);
+								const pageEntries = extractTeraboxEntries(pagedResponse) ?? [];
+								if (pageEntries.length === 0) {
+									break;
+								}
+								allSearchEntries = allSearchEntries.concat(pageEntries);
+								if (page >= 1000) {
+									break;
+								}
+								page += 1;
+							}
+						}
+
+						const dedupedEntries = dedupeTeraboxEntries(allSearchEntries);
+						const searchEntries = filterTeraboxEntriesByCategory(dedupedEntries, categoryFilter);
+						for (const entry of searchEntries) {
+							const identity = getTeraboxEntryIdentity(entry);
+							if (identity && globalSearchSeen.has(identity)) {
+								continue;
+							}
+							if (identity) {
+								globalSearchSeen.add(identity);
+							}
+							returnData.push({
+								json: formatTeraboxListEntry(
+									entry && typeof entry === 'object'
+										? (entry as IDataObject)
+										: ({ value: entry } as IDataObject),
+								),
 								pairedItem: { item: i },
 							});
 						}
@@ -1167,6 +1198,43 @@ function filterTeraboxEntriesByCategory(entries: unknown[], categoryFilter: stri
 		const entryCategory = normalizeNumber((entry as IDataObject).category);
 		return entryCategory === selectedCategory;
 	});
+}
+
+function dedupeTeraboxEntries(entries: unknown[]): unknown[] {
+	const seen = new Set<string>();
+	const deduped: unknown[] = [];
+
+	for (const entry of entries) {
+		const key = getTeraboxEntryIdentity(entry) ?? JSON.stringify(entry);
+
+		if (seen.has(key)) {
+			continue;
+		}
+
+		seen.add(key);
+		deduped.push(entry);
+	}
+
+	return deduped;
+}
+
+function getTeraboxEntryIdentity(entry: unknown): string | undefined {
+	if (!entry || typeof entry !== 'object') {
+		return undefined;
+	}
+
+	const record = entry as IDataObject;
+	const path = normalizeString(record.path);
+	if (path) {
+		return path;
+	}
+
+	const fsId = normalizeString(record.fs_id);
+	if (fsId) {
+		return `fs:${fsId}`;
+	}
+
+	return undefined;
 }
 
 function resolveTeraboxFileTypeLabel(

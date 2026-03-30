@@ -129,13 +129,12 @@ export const fileFields: INodeProperties[] = [
             },
         ],
         default: 'limit',
-        description: 'Choose how list results should be limited.',
+        description: 'Choose how list results should be limited',
     },
     {
         displayName: 'Limit',
         name: 'listLimit',
         type: 'number',
-        required: false,
         displayOptions: {
             show: {
                 resource: ['file'],
@@ -165,7 +164,7 @@ export const fileFields: INodeProperties[] = [
             minValue: 1,
         },
         default: 24,
-        description: 'Return files changed within the last N hours.',
+        description: 'Return files changed within the last N hours',
     },
     {
         displayName: 'Last Days',
@@ -182,7 +181,7 @@ export const fileFields: INodeProperties[] = [
             minValue: 1,
         },
         default: 7,
-        description: 'Return files changed within the last N days.',
+        description: 'Return files changed within the last N days',
     },
     {
         displayName: 'From Date',
@@ -197,7 +196,7 @@ export const fileFields: INodeProperties[] = [
             },
         },
         default: '',
-        description: 'Include files changed on or after this date and time.',
+        description: 'Include files changed on or after this date and time',
     },
     {
         displayName: 'To Date',
@@ -212,7 +211,7 @@ export const fileFields: INodeProperties[] = [
             },
         },
         default: '',
-        description: 'Include files changed on or before this date and time.',
+        description: 'Include files changed on or before this date and time',
     },
     {
         displayName: 'Invert Output',
@@ -226,7 +225,7 @@ export const fileFields: INodeProperties[] = [
             },
         },
         default: false,
-        description: 'When enabled, returns items outside the selected time filter instead of matching items.',
+        description: 'Whether to return items outside the selected time filter instead of matching items',
     },
     {
         displayName: 'Category Filter',
@@ -244,28 +243,28 @@ export const fileFields: INodeProperties[] = [
                 value: 'all',
             },
             {
-                name: 'Videos',
-                value: '1',
+                name: 'Documents',
+                value: '4',
             },
             {
                 name: 'Music',
                 value: '2',
             },
             {
+                name: 'Others',
+                value: '6',
+            },
+            {
                 name: 'Pictures',
                 value: '3',
             },
             {
-                name: 'Documents',
-                value: '4',
-            },
-            {
-                name: 'Others',
-                value: '6',
+                name: 'Videos',
+                value: '1',
             },
         ],
         default: 'all',
-        description: 'Filter output items by TeraBox category.',
+        description: 'Filter output items by TeraBox category',
     },
     {
         displayName: 'Sort By',
@@ -292,7 +291,7 @@ export const fileFields: INodeProperties[] = [
             },
         ],
         default: 'changeTime',
-        description: 'Sort output items by the selected field.',
+        description: 'Sort output items by the selected field',
     },
     {
         displayName: 'Ascending',
@@ -305,7 +304,7 @@ export const fileFields: INodeProperties[] = [
             },
         },
         default: true,
-        description: 'Whether sorting should be ascending (on) or descending (off).',
+        description: 'Whether sorting should be ascending (on) or descending (off)',
     },
     {
         displayName: 'Limit',
@@ -401,7 +400,6 @@ export const fileFields: INodeProperties[] = [
         displayName: 'New Name',
         name: 'renameTo',
         type: 'string',
-        required: false,
         displayOptions: {
             show: {
                 resource: ['file'],
@@ -423,7 +421,7 @@ export const fileFields: INodeProperties[] = [
             },
         },
         default: '/',
-        description: 'Absolute destination directory path for copy/move operations.',
+        description: 'Absolute destination directory path for copy/move operations',
     },
     // Upload Fields
     {
