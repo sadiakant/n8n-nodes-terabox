@@ -188,7 +188,35 @@ export const fileFields: INodeProperties[] = [
             },
         },
         default: '["/Folder/file.mp4"]',
-        description: 'For Delete, provide path strings: ["/path"]. For Copy/Move, use objects: [{"path":"/src", "dest":"/target"}]. For Rename: [{"path":"/old", "newname":"new"}].',
+        description: 'For Delete, provide path strings: ["/path"]. For Copy/Move, provide source paths as strings or objects: ["/src"] or [{"path":"/src"}]. For Rename, provide paths like ["/old/name.ext"] and use New Name field, or objects like [{"path":"/old/name.ext","newname":"new-name.ext"}].',
+    },
+    {
+        displayName: 'New Name',
+        name: 'renameTo',
+        type: 'string',
+        required: false,
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['rename'],
+            },
+        },
+        default: '',
+        description: 'New file/folder name for rename. If filelist contains objects with newname/newName, those values take priority.',
+    },
+    {
+        displayName: 'Destination Path',
+        name: 'destinationPath',
+        type: 'string',
+        required: true,
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['copy', 'move'],
+            },
+        },
+        default: '/',
+        description: 'Absolute destination directory path for copy/move operations.',
     },
     // Upload Fields
     {

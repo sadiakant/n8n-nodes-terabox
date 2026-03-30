@@ -98,7 +98,12 @@ export class Terabox implements INodeType {
 						const lang = this.getNodeParameter('qrLoginLanguage', i) as string;
 						const responseData = await startQrLogin({ lang, loginPageUrl });
 						const itemData: INodeExecutionData = {
-							json: formatStartQrLoginOutput(responseData),
+							json: buildOperationOutput(
+								resource,
+								operation,
+								formatStartQrLoginOutput(responseData),
+								'QR login started. Scan the QR code and poll login status.',
+							),
 							pairedItem: { item: i },
 						};
 
@@ -119,12 +124,20 @@ export class Terabox implements INodeType {
 						);
 						if (operation === 'completeQrLogin') {
 							returnData.push({
-								json: formatCompleteQrLoginOutput(responseData),
+								json: buildOperationOutput(
+									resource,
+									operation,
+									formatCompleteQrLoginOutput(responseData),
+								),
 								pairedItem: { item: i },
 							});
 						} else {
 							returnData.push({
-								json: formatCheckQrLoginOutput(responseData),
+								json: buildOperationOutput(
+									resource,
+									operation,
+									formatCheckQrLoginOutput(responseData),
+								),
 								pairedItem: { item: i },
 							});
 						}
@@ -139,21 +152,21 @@ export class Terabox implements INodeType {
 							]);
 
 							returnData.push({
-								json: {
+								json: buildOperationOutput(resource, operation, {
 									account: accountResponse,
 									login: loginResponse,
 									ok: true,
 									quota: quotaResponse,
 									session: getSessionDiagnostics(session),
-								},
+								}),
 								pairedItem: { item: i },
 							});
 						} else if (operation === 'sessionDiagnostics') {
 							returnData.push({
-								json: {
+								json: buildOperationOutput(resource, operation, {
 									ok: true,
 									session: getSessionDiagnostics(session),
-								},
+								}),
 								pairedItem: { item: i },
 							});
 						}
@@ -161,10 +174,16 @@ export class Terabox implements INodeType {
 				} else if (resource === 'user') {
 					if (operation === 'getInfo') {
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/passport/get_info');
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'getQuota') {
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/quota');
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					}
 				} else if (resource === 'file') {
 					if (operation === 'list') {
@@ -175,7 +194,10 @@ export class Terabox implements INodeType {
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/list', {}, qs, {
 							includeBdstoken: true,
 						});
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'search') {
 						const key = this.getNodeParameter('key', i) as string;
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
@@ -184,7 +206,10 @@ export class Terabox implements INodeType {
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/search', {}, qs, {
 							includeBdstoken: true,
 						});
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'getMetadata') {
 						const targetPathsStr = this.getNodeParameter('targetPaths', i) as string;
 						const dlink = this.getNodeParameter('dlink', i) as boolean;
@@ -196,9 +221,13 @@ export class Terabox implements INodeType {
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/filemetas', {}, qs, {
 							includeBdstoken: true,
 						});
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (['delete', 'copy', 'move', 'rename'].includes(operation)) {
 						let filelistJson = '';
+						let renameEntries: Array<{ path: string; newname: string }> = [];
 
 						if (operation === 'delete') {
 							const filelistValue = this.getNodeParameter('filelist', i);
@@ -211,16 +240,78 @@ export class Terabox implements INodeType {
 								throw new NodeOperationError(this.getNode(), 'No valid file paths provided.', { itemIndex: i });
 							}
 							filelistJson = JSON.stringify(pathList);
-						} else {
+						} else if (operation === 'copy' || operation === 'move') {
+							const destinationPath = (this.getNodeParameter('destinationPath', i) as string).trim();
+							if (!destinationPath) {
+								throw new NodeOperationError(this.getNode(), 'Destination path is required.', { itemIndex: i });
+							}
+
 							const filelistValue = this.getNodeParameter('filelist', i);
 							const parsedFilelist = parseJsonValue(filelistValue);
 							const listArray = (Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]) as Array<string | IDataObject>;
 							const objList = listArray
-								.map((item) => (typeof item === 'string' ? { path: item } : item))
-								.filter((item) => item && typeof item.path === 'string' && (item.path as string).trim() !== '');
+								.map((item) => {
+									if (typeof item === 'string') {
+										return { dest: destinationPath, path: item };
+									}
+
+									const path = typeof item.path === 'string' ? item.path : '';
+									const legacyDest = typeof item.dest === 'string' ? item.dest : '';
+
+									return {
+										dest: destinationPath || legacyDest,
+										path,
+									};
+								})
+								.filter(
+									(item) =>
+										item &&
+										typeof item.path === 'string' &&
+										(item.path as string).trim() !== '' &&
+										typeof item.dest === 'string' &&
+										(item.dest as string).trim() !== '',
+								);
 							if (objList.length === 0) {
 								throw new NodeOperationError(this.getNode(), 'No valid file paths provided.', { itemIndex: i });
 							}
+							filelistJson = JSON.stringify(objList);
+						} else {
+							const renameTo = (this.getNodeParameter('renameTo', i, '') as string).trim();
+							const filelistValue = this.getNodeParameter('filelist', i);
+							const parsedFilelist = parseJsonValue(filelistValue);
+							const listArray = (Array.isArray(parsedFilelist) ? parsedFilelist : [parsedFilelist]) as Array<string | IDataObject>;
+							const objList = listArray
+								.map((item) => {
+									if (typeof item === 'string') {
+										return { path: item, newname: renameTo };
+									}
+
+									return {
+										path: typeof item.path === 'string' ? item.path : '',
+										newname:
+											typeof item.newname === 'string'
+												? item.newname
+												: typeof item.newName === 'string'
+													? item.newName
+													: renameTo,
+									};
+								})
+								.filter(
+									(item) =>
+										item &&
+										typeof item.path === 'string' &&
+										item.path.trim() !== '' &&
+										typeof item.newname === 'string' &&
+										item.newname.trim() !== '',
+								);
+							if (objList.length === 0) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'No valid rename entries provided. Set New Name field or use objects like [{"path":"/old/name.ext","newname":"new-name.ext"}] / [{"path":"/old/name.ext","newName":"new-name.ext"}].',
+									{ itemIndex: i },
+								);
+							}
+							renameEntries = objList;
 							filelistJson = JSON.stringify(objList);
 						}
 
@@ -275,7 +366,20 @@ export class Terabox implements INodeType {
 							);
 						}
 
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						const outputData =
+							operation === 'rename'
+								? addRenameOutputDetails(responseData, renameEntries)
+								: responseData;
+
+						returnData.push({
+							json: buildOperationOutput(
+								resource,
+								operation,
+								outputData,
+								getFileManagerOperationSummary(operation, outputData),
+							),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'download') {
 						const downloadPath = this.getNodeParameter('downloadPath', i) as string;
 						if (!downloadPath.trim()) {
@@ -325,13 +429,13 @@ export class Terabox implements INodeType {
 						);
 
 						returnData.push({
-							json: {
+							json: buildOperationOutput(resource, operation, {
 								fileName,
 								filePath: downloadPath,
 								fs_id: confirmedFileInfo.fs_id,
 								mimeType,
 								size: confirmedFileInfo.size,
-							},
+							}, `File downloaded successfully: ${fileName}`),
 							binary: { data: binary },
 							pairedItem: { item: i },
 						});
@@ -352,7 +456,10 @@ export class Terabox implements INodeType {
 							{},
 							{ includeBdstoken: true },
 						);
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'verify') {
 						const shorturl = this.getNodeParameter('shorturl', i) as string;
 						const pwd = this.getNodeParameter('pwd', i) as string;
@@ -364,19 +471,28 @@ export class Terabox implements INodeType {
 							{ pwd },
 							qs,
 						);
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'query') {
 						const shorturl = this.getNodeParameter('shorturl', i) as string;
 						const sekey = this.getNodeParameter('sekey', i, '') as string;
 						const qs = { root: 1, sekey, shorturl: normalizeShorturl(shorturl) };
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/api/shorturlinfo', {}, qs);
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'list') {
 						const shorturl = this.getNodeParameter('shorturl', i) as string;
 						const sekey = this.getNodeParameter('sekey', i) as string;
 						const qs = { num: 1000, page: 1, root: 1, sekey, shorturl: normalizeShorturl(shorturl) };
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/share/list', {}, qs);
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'copy') {
 						const shareid = this.getNodeParameter('shareid', i) as string;
 						const uk = this.getNodeParameter('uk', i) as string;
@@ -390,7 +506,10 @@ export class Terabox implements INodeType {
 						const responseData = await teraboxApiRequest.call(this, 'POST', '/share/transfer', body, qs, {
 							includeBdstoken: true,
 						});
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'download') {
 						throw new NodeOperationError(
 							this.getNode(),
@@ -410,7 +529,10 @@ export class Terabox implements INodeType {
 							{ ehps: 0, path, type },
 							{ expectText: true, includeBdstoken: true },
 						);
-						returnData.push({ json: { m3u8: responseData }, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, { m3u8: responseData }),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'shareStreamUrl') {
 						const fid = this.getNodeParameter('fid', i) as string;
 						const shareid = this.getNodeParameter('shareid', i) as string;
@@ -425,7 +547,10 @@ export class Terabox implements INodeType {
 							{ fid, sekey, shareid, type, uk },
 							{ expectText: true, includeBdstoken: true },
 						);
-						returnData.push({ json: { m3u8: responseData }, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, { m3u8: responseData }),
+							pairedItem: { item: i },
+						});
 					} else if (operation === 'metadata') {
 						const fid = this.getNodeParameter('fid', i) as string;
 						const shareid = this.getNodeParameter('shareid', i) as string;
@@ -435,14 +560,24 @@ export class Terabox implements INodeType {
 						const responseData = await teraboxApiRequest.call(this, 'GET', '/share/mediameta', {}, qs, {
 							includeBdstoken: true,
 						});
-						returnData.push({ json: responseData, pairedItem: { item: i } });
+						returnData.push({
+							json: buildOperationOutput(resource, operation, responseData),
+							pairedItem: { item: i },
+						});
 					}
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
 					returnData.push({
 						json: {
+							success: false,
 							error: (error as Error).message,
+							operationStatus: {
+								resource,
+								operation,
+								summary: `${resource}.${operation} failed`,
+								timestamp: new Date().toISOString(),
+							},
 						},
 						pairedItem: { item: i },
 					});
@@ -542,4 +677,183 @@ function formatCompleteQrLoginOutput(responseData: IDataObject): IDataObject {
 		message: responseData.message || 'QR login is not yet completed. Please check scan status.',
 		loginStateJson: responseData.loginStateJson,
 	};
+}
+
+function buildOperationOutput(
+	resource: string,
+	operation: string,
+	responseData: IDataObject,
+	summary?: string,
+): IDataObject {
+	const errno = normalizeNumber(responseData.errno);
+	const success = errno === undefined || errno === 0;
+	const requestId = normalizeString(responseData.request_id ?? responseData.requestId);
+	const taskId = normalizeString(responseData.taskid ?? responseData.taskId);
+	const itemCount = extractItemCount(responseData);
+
+	const operationStatus: IDataObject = {
+		success,
+		resource,
+		operation,
+		summary:
+			summary ??
+			buildDefaultSummary({
+				operation,
+				resource,
+				success,
+				taskId,
+				itemCount,
+			}),
+		timestamp: new Date().toISOString(),
+	};
+
+	if (errno !== undefined) {
+		operationStatus.errno = errno;
+	}
+
+	if (requestId) {
+		operationStatus.requestId = requestId;
+	}
+
+	if (taskId) {
+		operationStatus.taskId = taskId;
+		operationStatus.asyncTask = true;
+		operationStatus.nextStep =
+			'Task accepted by TeraBox. Track task progress in TeraBox until it is completed.';
+	}
+
+	if (itemCount !== undefined) {
+		operationStatus.itemCount = itemCount;
+	}
+
+	return {
+		...responseData,
+		success,
+		operationStatus,
+	};
+}
+
+function getFileManagerOperationSummary(operation: string, responseData: IDataObject): string {
+	const taskId = normalizeString(responseData.taskid ?? responseData.taskId);
+	const infoCount = Array.isArray(responseData.info) ? responseData.info.length : undefined;
+
+	if (taskId) {
+		return `${toSentenceCase(operation)} request accepted. Task ID ${taskId} has been created.`;
+	}
+
+	if (infoCount !== undefined) {
+		return `${toSentenceCase(operation)} completed. Processed ${infoCount} item${infoCount === 1 ? '' : 's'}.`;
+	}
+
+	return `${toSentenceCase(operation)} request completed successfully.`;
+}
+
+function addRenameOutputDetails(
+	responseData: IDataObject,
+	renameEntries: Array<{ path: string; newname: string }>,
+): IDataObject {
+	if (!Array.isArray(renameEntries) || renameEntries.length === 0) {
+		return responseData;
+	}
+
+	const oldNames = renameEntries.map((entry) => extractNameFromPath(entry.path));
+	const newNames = renameEntries.map((entry) => entry.newname);
+
+	return {
+		...responseData,
+		OldName: oldNames.length === 1 ? oldNames[0] : oldNames,
+		NewName: newNames.length === 1 ? newNames[0] : newNames,
+	};
+}
+
+function extractNameFromPath(path: string): string {
+	const parts = path
+		.split('/')
+		.map((part) => part.trim())
+		.filter(Boolean);
+
+	if (parts.length === 0) {
+		return path.trim();
+	}
+
+	return parts[parts.length - 1];
+}
+
+function buildDefaultSummary(params: {
+	operation: string;
+	resource: string;
+	success: boolean;
+	taskId?: string;
+	itemCount?: number;
+}): string {
+	const { operation, resource, success, taskId, itemCount } = params;
+
+	if (!success) {
+		return `${resource}.${operation} failed.`;
+	}
+
+	if (taskId) {
+		return `${toSentenceCase(operation)} request accepted. Task ID ${taskId} has been created.`;
+	}
+
+	if (itemCount !== undefined) {
+		return `${toSentenceCase(operation)} completed successfully. Returned ${itemCount} item${itemCount === 1 ? '' : 's'}.`;
+	}
+
+	return `${toSentenceCase(operation)} completed successfully.`;
+}
+
+function extractItemCount(responseData: IDataObject): number | undefined {
+	const info = responseData.info;
+	if (Array.isArray(info)) {
+		return info.length;
+	}
+
+	const list = responseData.list;
+	if (Array.isArray(list)) {
+		return list.length;
+	}
+
+	return undefined;
+}
+
+function normalizeNumber(value: unknown): number | undefined {
+	if (typeof value === 'number' && Number.isFinite(value)) {
+		return value;
+	}
+
+	if (typeof value === 'string') {
+		const trimmed = value.trim();
+		if (!trimmed) {
+			return undefined;
+		}
+
+		const parsed = Number(trimmed);
+		if (Number.isFinite(parsed)) {
+			return parsed;
+		}
+	}
+
+	return undefined;
+}
+
+function normalizeString(value: unknown): string | undefined {
+	if (typeof value === 'string') {
+		const trimmed = value.trim();
+		return trimmed || undefined;
+	}
+
+	if (typeof value === 'number' && Number.isFinite(value)) {
+		return String(value);
+	}
+
+	return undefined;
+}
+
+function toSentenceCase(value: string): string {
+	if (!value) {
+		return value;
+	}
+
+	return value.charAt(0).toUpperCase() + value.slice(1);
 }
