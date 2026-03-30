@@ -63,7 +63,7 @@ export const fileDescription: INodeProperties[] = [
             {
                 name: 'Upload',
                 value: 'upload',
-                description: 'Not available yet in the session-auth version',
+                description: 'Upload a binary file to TeraBox',
                 action: 'Upload a file',
             },
         ],
@@ -425,8 +425,8 @@ export const fileFields: INodeProperties[] = [
     },
     // Upload Fields
     {
-        displayName: 'File Target Path',
-        name: 'path',
+        displayName: 'Destination Path',
+        name: 'uploadPath',
         type: 'string',
         required: true,
         displayOptions: {
@@ -436,7 +436,32 @@ export const fileFields: INodeProperties[] = [
             },
         },
         default: '/uploaded_file.txt',
-        description: 'The absolute path where the file should be uploaded',
+        description: 'Absolute destination file path in TeraBox, including file name (example: /Photos/image.jpg)',
+    },
+    {
+        displayName: 'Source',
+        name: 'uploadSource',
+        type: 'options',
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['upload'],
+            },
+        },
+        options: [
+            {
+                name: 'Binary',
+                value: 'binary',
+                description: 'Upload file data from an incoming binary property',
+            },
+            {
+                name: 'URL',
+                value: 'url',
+                description: 'Download the file from a URL and upload it to TeraBox',
+            },
+        ],
+        default: 'binary',
+        description: 'Choose where the upload file data should come from',
     },
     {
         displayName: 'Binary Property',
@@ -447,9 +472,26 @@ export const fileFields: INodeProperties[] = [
             show: {
                 resource: ['file'],
                 operation: ['upload'],
+                uploadSource: ['binary'],
             },
         },
         default: 'data',
         description: 'Name of the binary property which contains the data for the file to be uploaded',
+    },
+    {
+        displayName: 'Source URL',
+        name: 'sourceUrl',
+        type: 'string',
+        required: true,
+        displayOptions: {
+            show: {
+                resource: ['file'],
+                operation: ['upload'],
+                uploadSource: ['url'],
+            },
+        },
+        default: '',
+        placeholder: 'https://example.com/image.jpg',
+        description: 'Direct file URL to download and upload to TeraBox',
     },
 ];

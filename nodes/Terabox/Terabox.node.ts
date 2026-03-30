@@ -17,6 +17,7 @@ import { shareDescription, shareFields } from './resources/share';
 import { userDescription, userFields } from './resources/user';
 import { teraboxApiRequest, teraboxTextRequest } from './utils/api';
 import { getSessionDiagnostics, getTeraboxSession } from './utils/SessionAuth';
+import { uploadTeraboxFile } from './utils/UploadHelper';
 
 export class Terabox implements INodeType {
 	description: INodeTypeDescription = {
@@ -594,11 +595,109 @@ export class Terabox implements INodeType {
 							pairedItem: { item: i },
 						});
 					} else if (operation === 'upload') {
-						throw new NodeOperationError(
-							this.getNode(),
-							'File upload is not available in the session-auth version yet.',
-							{ itemIndex: i },
+						let uploadPath = (this.getNodeParameter('uploadPath', i, '') as string).trim();
+						if (!uploadPath) {
+							uploadPath = (this.getNodeParameter('path', i, '') as string).trim();
+						}
+						if (!uploadPath) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Destination Path is required for upload.',
+								{ itemIndex: i },
+							);
+						}
+						if (/^https?:\/\//i.test(uploadPath)) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Destination Path must be a TeraBox file path (example: /Photos/image.jpg), not a URL. Put file content in Binary Property and set a TeraBox path here.',
+								{ itemIndex: i },
+							);
+						}
+
+						const uploadSource = (this.getNodeParameter('uploadSource', i, 'binary') as string).trim();
+
+						let binaryBuffer: Buffer;
+						let fileName: string;
+						let mimeType: string;
+						if (uploadSource === 'url') {
+							const sourceUrl = (this.getNodeParameter('sourceUrl', i, '') as string).trim();
+							if (!sourceUrl) {
+								throw new NodeOperationError(this.getNode(), 'Source URL is required for URL upload.', {
+									itemIndex: i,
+								});
+							}
+
+							const sourceResponse = (await fetchExternalBinaryUrl.call(this, sourceUrl, i)) as {
+								body: Buffer;
+								headers?: Record<string, string>;
+							};
+
+							binaryBuffer = Buffer.from(sourceResponse.body);
+							mimeType = sourceResponse.headers?.['content-type'] || 'application/octet-stream';
+							fileName = resolveUploadFileNameFromUrl(
+								sourceUrl,
+								sourceResponse.headers?.['content-disposition'],
+							);
+						} else {
+							const binaryPropertyInput = (this.getNodeParameter('binaryPropertyName', i, 'data') as string).trim();
+							if (!binaryPropertyInput) {
+								throw new NodeOperationError(this.getNode(), 'Binary Property is required for upload.', {
+									itemIndex: i,
+								});
+							}
+
+							if (/^https?:\/\//i.test(binaryPropertyInput)) {
+								const sourceResponse = (await fetchExternalBinaryUrl.call(this, binaryPropertyInput, i)) as {
+									body: Buffer;
+									headers?: Record<string, string>;
+								};
+
+								binaryBuffer = Buffer.from(sourceResponse.body);
+								mimeType = sourceResponse.headers?.['content-type'] || 'application/octet-stream';
+								fileName = resolveUploadFileNameFromUrl(
+									binaryPropertyInput,
+									sourceResponse.headers?.['content-disposition'],
+								);
+							} else {
+							try {
+								binaryBuffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyInput);
+								const binaryData = this.helpers.assertBinaryData(i, binaryPropertyInput);
+								fileName =
+									(binaryData.fileName as string | undefined) ||
+									uploadPath.split('/').filter(Boolean).pop() ||
+									'upload.bin';
+								mimeType =
+									(binaryData.mimeType as string | undefined) || 'application/octet-stream';
+							} catch {
+								throw new NodeOperationError(
+									this.getNode(),
+									`Binary Property "${binaryPropertyInput}" was not found. Use a binary key like "data", or provide a direct file URL in this field.`,
+									{ itemIndex: i },
+								);
+							}
+							}
+						}
+
+						uploadPath = buildUploadTargetPath(uploadPath, fileName);
+
+						const responseData = await uploadTeraboxFile.call(
+							this,
+							binaryBuffer,
+							uploadPath,
+							mimeType,
+							fileName,
+							i,
 						);
+
+						returnData.push({
+							json: buildOperationOutput(
+								resource,
+								operation,
+								responseData,
+								`File uploaded successfully: ${fileName}`,
+							),
+							pairedItem: { item: i },
+						});
 					}
 				} else if (resource === 'share') {
 					if (operation === 'activate') {
@@ -1273,6 +1372,123 @@ function resolveTeraboxFileTypeLabel(
 	}
 
 	return 'Unknown';
+}
+
+function resolveUploadFileNameFromUrl(url: string, contentDisposition?: string): string {
+	const fromDisposition = extractFileNameFromContentDisposition(contentDisposition);
+	if (fromDisposition) {
+		return fromDisposition;
+	}
+
+	try {
+		const parsed = new URL(url);
+		const candidate = parsed.pathname.split('/').filter(Boolean).pop();
+		if (candidate) {
+			return decodeURIComponent(candidate);
+		}
+	} catch {
+		const fallback = url.split('/').filter(Boolean).pop();
+		if (fallback) {
+			return fallback;
+		}
+	}
+
+	return 'upload.bin';
+}
+
+function extractFileNameFromContentDisposition(contentDisposition?: string): string | undefined {
+	if (!contentDisposition) {
+		return undefined;
+	}
+
+	const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+	if (utf8Match?.[1]) {
+		return decodeURIComponent(utf8Match[1].replace(/^"(.*)"$/, '$1'));
+	}
+
+	const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+	if (plainMatch?.[1]) {
+		return plainMatch[1];
+	}
+
+	return undefined;
+}
+
+function buildUploadTargetPath(uploadPath: string, fileName: string): string {
+	const trimmed = uploadPath.trim() || '/';
+	const normalizedFileName = fileName.trim() || 'upload.bin';
+
+	if (trimmed === '/') {
+		return `/${normalizedFileName}`;
+	}
+
+	if (trimmed.endsWith('/')) {
+		return `${trimmed}${normalizedFileName}`;
+	}
+
+	return trimmed;
+}
+
+async function fetchExternalBinaryUrl(
+	this: IExecuteFunctions,
+	url: string,
+	itemIndex: number,
+): Promise<{ body: Buffer; headers?: Record<string, string> }> {
+	const origin = extractUrlOrigin(url);
+	const requestVariants: Array<{ headers?: IDataObject }> = [
+		{
+			headers: {
+				Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+				Referer: `${origin}/`,
+				'User-Agent':
+					'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+			},
+		},
+		{
+			headers: {
+				'User-Agent':
+					'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+			},
+		},
+		{},
+	];
+
+	let lastError: unknown;
+	for (const variant of requestVariants) {
+		try {
+			return (await this.helpers.httpRequest({
+				method: 'GET',
+				url,
+				headers: variant.headers,
+				encoding: 'arraybuffer',
+				returnFullResponse: true,
+			})) as { body: Buffer; headers?: Record<string, string> };
+		} catch (error) {
+			lastError = error;
+		}
+	}
+
+	throw new NodeOperationError(
+		this.getNode(),
+		`Failed to download source URL for upload: ${getErrorMessage(lastError)}`,
+		{ itemIndex },
+	);
+}
+
+function extractUrlOrigin(url: string): string {
+	try {
+		return new URL(url).origin;
+	} catch {
+		return '';
+	}
+}
+
+function getErrorMessage(error: unknown): string {
+	if (error instanceof Error && error.message) {
+		return error.message;
+	}
+
+	return String(error);
 }
 
 function normalizeNumber(value: unknown): number | undefined {
