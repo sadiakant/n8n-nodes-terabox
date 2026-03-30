@@ -294,16 +294,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-### **Technology Stack**
-
-<div style="display: flex; gap: 10px; flex-wrap: wrap; margin: 15px 0;">
-  <span style="background: #007bff; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">TypeScript</span>
-  <span style="background: #6f42c1; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">n8n</span>
-  <span style="background: #28a745; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">TeraBox API</span>
-  <span style="background: #ffc107; color: black; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Session Auth</span>
-  <span style="background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">QR Login</span>
-</div>
-
 ### **Publishing Status**
 
 [![Build Status](https://github.com/sadiakant/n8n-nodes-terabox/actions/workflows/build.yml/badge.svg)](https://github.com/sadiakant/n8n-nodes-terabox/actions/workflows/build.yml)

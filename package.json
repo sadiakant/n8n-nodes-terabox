@@ -37,7 +37,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sadiakant/n8n-nodes-terabox.git"
+    "url": "git+https://github.com/sadiakant/n8n-nodes-terabox.git"
   },
   "scripts": {
     "build": "n8n-node build",
