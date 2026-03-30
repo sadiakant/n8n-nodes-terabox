@@ -12,11 +12,11 @@ import {
 import { authenticationDescription, authenticationFields } from './resources/authentication';
 import { fileDescription, fileFields } from './resources/file';
 import { mediaDescription, mediaFields } from './resources/media';
-import { checkQrLogin, startQrLogin } from './QrLogin';
+import { checkQrLogin, startQrLogin } from './utils/QrLogin';
 import { shareDescription, shareFields } from './resources/share';
 import { userDescription, userFields } from './resources/user';
-import { teraboxApiRequest, teraboxTextRequest } from './GenericFunctions';
-import { getSessionDiagnostics, getTeraboxSession } from './SessionAuth';
+import { teraboxApiRequest, teraboxTextRequest } from './utils/api';
+import { getSessionDiagnostics, getTeraboxSession } from './utils/SessionAuth';
 
 export class Terabox implements INodeType {
 	description: INodeTypeDescription = {
@@ -110,17 +110,24 @@ export class Terabox implements INodeType {
 						}
 
 						returnData.push(itemData);
-					} else if (operation === 'checkQrLogin') {
+					} else if (operation === 'checkQrLogin' || operation === 'completeQrLogin') {
 						const qrLoginStateJson = this.getNodeParameter('qrLoginStateJson', i, '') as
 							| string
 							| IDataObject;
 						const responseData = await checkQrLogin(
 							resolveQrLoginStateInput(qrLoginStateJson, items[i]?.json),
 						);
-						returnData.push({
-							json: formatCheckQrLoginOutput(responseData),
-							pairedItem: { item: i },
-						});
+						if (operation === 'completeQrLogin') {
+							returnData.push({
+								json: formatCompleteQrLoginOutput(responseData),
+								pairedItem: { item: i },
+							});
+						} else {
+							returnData.push({
+								json: formatCheckQrLoginOutput(responseData),
+								pairedItem: { item: i },
+							});
+						}
 					} else {
 						const session = await getTeraboxSession.call(this);
 
@@ -497,11 +504,8 @@ function formatCheckQrLoginOutput(responseData: IDataObject): IDataObject {
 		return {
 			ok: responseData.ok,
 			status,
-			message: 'Use the credentials fields below in the TeraBox Session API credential.',
-			cookieHeader: responseData.cookieHeader,
-			jsToken: responseData.jsToken,
-			bdstoken: responseData.bdstoken,
-			baseUrl: responseData.baseUrl,
+			message: 'Scan is completed successfully.',
+			loginStateJson: responseData.loginStateJson,
 		};
 	}
 
@@ -511,6 +515,31 @@ function formatCheckQrLoginOutput(responseData: IDataObject): IDataObject {
 		message: responseData.message,
 		displayName: responseData.displayName,
 		avatarUrl: responseData.avatarUrl,
+		loginStateJson: responseData.loginStateJson,
+	};
+}
+
+function formatCompleteQrLoginOutput(responseData: IDataObject): IDataObject {
+	const status = responseData.status;
+
+	if (status === 'success') {
+		return {
+			status,
+			accountName: responseData.displayName || responseData.userId || 'Unknown',
+			cookieHeader: responseData.cookieHeader,
+			jsToken: responseData.jsToken,
+			bdstoken: responseData.bdstoken,
+			baseUrl: responseData.baseUrl,
+			cookieExpiryDate: responseData.cookieExpiry ? new Date(responseData.cookieExpiry as number).toISOString() : 'Not explicitly provided by API (Session typically lasts ~30 days)',
+			importantNote: 'IMPORTANT: Save these Cookies to Local PC or Other safe Place for Fillup in future credentials.',
+			loginStateJson: responseData.loginStateJson,
+		};
+	}
+
+	return {
+		ok: responseData.ok,
+		status,
+		message: responseData.message || 'QR login is not yet completed. Please check scan status.',
 		loginStateJson: responseData.loginStateJson,
 	};
 }

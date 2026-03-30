@@ -32,6 +32,7 @@ type HttpRequestConfig = {
 
 type HttpResponse = {
 	bodyText: string;
+	cookieExpiry?: number;
 	finalUrl: string;
 	headers: IncomingHttpHeaders;
 	statusCode: number;
@@ -76,6 +77,7 @@ type ExtractedPageTokens = {
 
 export type QrLoginState = {
 	browserId: string;
+	cookieExpiry?: number;
 	cookies: CookieJar;
 	lang: string;
 	loginOrigin: string;
@@ -428,6 +430,9 @@ async function finalizeQrLoginSession(
 	}
 
 	const landingPageResponse = await fetchSessionLandingPage(state, cookieJar, payload);
+	if (landingPageResponse.cookieExpiry) {
+		state.cookieExpiry = landingPageResponse.cookieExpiry;
+	}
 	const landingPageTokens = extractPageTokens(landingPageResponse.bodyText);
 	const finalNdus = normalizeNonEmptyString(cookieJar.ndus) ?? responseNdus;
 
@@ -466,6 +471,7 @@ async function finalizeQrLoginSession(
 		loginOrigin: state.loginOrigin,
 		ndus: finalNdus,
 		userId: payload.userid ?? '',
+		cookieExpiry: state.cookieExpiry,
 	};
 }
 
@@ -575,7 +581,7 @@ async function httpRequestWithRetry(
 
 					incomingMessage.on('end', () => {
 						try {
-							updateCookieJar(jar, incomingMessage.headers['set-cookie']);
+							const stickyJar = updateCookieJar(jar, incomingMessage.headers['set-cookie']);
 							const bodyBuffer = Buffer.concat(chunks);
 							const decodedBody = decompressResponseBody(
 								bodyBuffer,
@@ -615,6 +621,7 @@ async function httpRequestWithRetry(
 
 							resolve({
 								bodyText: decodedBody,
+								cookieExpiry: stickyJar.earliestExpiry,
 								finalUrl: requestUrl.toString(),
 								headers: incomingMessage.headers,
 								statusCode,
@@ -724,6 +731,7 @@ function parseQrLoginState(rawState: unknown): QrLoginState {
 		seq,
 		step,
 		uuid,
+		cookieExpiry: normalizeNumber(candidate.cookieExpiry),
 		vCode: normalizeNonEmptyString(candidate.vCode),
 	};
 }
@@ -826,16 +834,23 @@ function unwrapQrApiPayload<T>(response: QrApiResponse<T>): T {
 	return response.data;
 }
 
-function updateCookieJar(cookieJar: CookieJar, setCookieHeader: string[] | string | undefined): void {
+function updateCookieJar(
+	cookieJar: CookieJar,
+	setCookieHeader: string[] | string | undefined,
+): { earliestExpiry?: number } {
 	const setCookieValues = Array.isArray(setCookieHeader)
 		? setCookieHeader
 		: typeof setCookieHeader === 'string'
 			? [setCookieHeader]
 			: [];
 
+	let earliestExpiry: number | undefined;
+
 	for (const setCookieValue of setCookieValues) {
-		const [cookiePair] = setCookieValue.split(';', 1);
+		const parts = setCookieValue.split(';').map((p) => p.trim());
+		const cookiePair = parts[0] || '';
 		const separatorIndex = cookiePair.indexOf('=');
+
 		if (separatorIndex <= 0) {
 			continue;
 		}
@@ -846,7 +861,33 @@ function updateCookieJar(cookieJar: CookieJar, setCookieHeader: string[] | strin
 		if (cookieName) {
 			cookieJar[cookieName] = cookieValue;
 		}
+
+		// Try to parse expiry
+		for (let j = 1; j < parts.length; j++) {
+			const part = parts[j] || '';
+			const lowerPart = part.toLowerCase();
+			if (lowerPart.startsWith('expires=')) {
+				const expiryStr = part.slice(8).trim();
+				const expiryDate = Date.parse(expiryStr);
+				if (!isNaN(expiryDate)) {
+					if (earliestExpiry === undefined || expiryDate < earliestExpiry) {
+						earliestExpiry = expiryDate;
+					}
+				}
+			} else if (lowerPart.startsWith('max-age=')) {
+				const maxAgeStr = part.slice(8).trim();
+				const maxAge = parseInt(maxAgeStr, 10);
+				if (!isNaN(maxAge)) {
+					const expiryDate = Date.now() + maxAge * 1000;
+					if (earliestExpiry === undefined || expiryDate < earliestExpiry) {
+						earliestExpiry = expiryDate;
+					}
+				}
+			}
+		}
 	}
+
+	return { earliestExpiry };
 }
 
 function isCookieJar(value: unknown): value is CookieJar {

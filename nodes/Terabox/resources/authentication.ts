@@ -25,6 +25,12 @@ export const authenticationDescription: INodeProperties[] = [
 				action: 'Check QR login',
 			},
 			{
+				name: 'Complete QR Login',
+				value: 'completeQrLogin',
+				description: 'Get final session credentials from a confirmed QR login state',
+				action: 'Complete QR login',
+			},
+			{
 				name: 'Validate Session',
 				value: 'validateSession',
 				description: 'Check whether the current browser session credential is valid and ready to use',
@@ -73,13 +79,13 @@ export const authenticationFields: INodeProperties[] = [
 		displayName: 'QR Login State JSON',
 		name: 'qrLoginStateJson',
 		type: 'string',
-		default: '',
+		default: '={{ $json.loginStateJson }}',
 		typeOptions: {
 			rows: 8,
 		},
 		displayOptions: {
 			show: {
-				operation: ['checkQrLogin'],
+				operation: ['checkQrLogin', 'completeQrLogin'],
 				resource: ['authentication'],
 			},
 		},
