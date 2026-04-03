@@ -98,7 +98,7 @@ export class Terabox implements INodeType {
 					if (operation === 'startQrLogin') {
 						const loginPageUrl = this.getNodeParameter('qrLoginPageUrl', i) as string;
 						const lang = this.getNodeParameter('qrLoginLanguage', i) as string;
-						const responseData = await startQrLogin({ lang, loginPageUrl });
+						const responseData = await startQrLogin.call(this, { lang, loginPageUrl });
 						const itemData: INodeExecutionData = {
 							json: buildOperationOutput(
 								resource,
@@ -125,7 +125,8 @@ export class Terabox implements INodeType {
 						const qrLoginStateJson = this.getNodeParameter('qrLoginStateJson', i, '') as
 							| string
 							| IDataObject;
-						const responseData = await checkQrLogin(
+						const responseData = await checkQrLogin.call(
+							this,
 							resolveQrLoginStateInput(qrLoginStateJson, items[i]?.json),
 						);
 						if (operation === 'completeQrLogin') {
@@ -291,13 +292,13 @@ export class Terabox implements INodeType {
 								: undefined;
 							const modeFilteredEntries = categoryFilteredEntries
 								? filterTeraboxEntriesByListMode(categoryFilteredEntries, {
-										listMode,
-										lastDays,
-										lastHours,
-										fromDate,
-										toDate,
-										invertOutput,
-									})
+									listMode,
+									lastDays,
+									lastHours,
+									fromDate,
+									toDate,
+									invertOutput,
+								})
 								: undefined;
 							if (modeFilteredEntries) {
 								const sortedEntries = sortTeraboxEntries(

@@ -4,17 +4,9 @@ export class TeraboxApi implements ICredentialType {
 	name = 'teraboxApi';
 	displayName = 'TeraBox Session API';
 	icon = 'file:terabox.svg' as const;
-	documentationUrl = 'https://github.com/sadiakant/n8n-nodes-terabox#credentials';
+	documentationUrl = 'https://github.com/sadiakant/n8n-nodes-terabox/blob/main/docs/AUTHORIZATION_GUIDE.md';
 
 	properties: INodeProperties[] = [
-		{
-			displayName: 'How Authentication Works',
-			name: 'notice',
-			type: 'notice',
-			default: '',
-			description:
-				'TeraBox does not expose a reliable public developer OAuth flow for normal users. This node uses a logged-in browser session (cookies + jsToken) captured from an authenticated request. You can also use Authentication -> Start QR Login + Check QR Login to generate these values.',
-		},
 		{
 			displayName: 'Cookie Header',
 			name: 'cookieHeader',

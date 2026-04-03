@@ -1,6 +1,5 @@
 import { IDataObject, IExecuteFunctions, NodeOperationError } from 'n8n-workflow';
 import { createHash } from 'crypto';
-import { request as httpsRequest } from 'https';
 import { getTeraboxSession } from './SessionAuth';
 
 const DEFAULT_USER_AGENT =
@@ -283,7 +282,7 @@ async function uploadChunksWithFallback(
 		for (const host of hosts) {
 			for (const requestVariant of requestVariants) {
 				try {
-					const response = await postUploadChunk({
+					const response = await postUploadChunk.call(this, {
 						host,
 						baseOrigin: params.baseOrigin,
 						cookieHeader: params.cookieHeader,
@@ -556,11 +555,11 @@ function createUploadChunks(binaryDataBuffer: Buffer): Array<{ buffer: Buffer; m
 	return chunks.length > 0
 		? chunks
 		: [
-				{
-					buffer: Buffer.alloc(0),
-					md5: createHash('md5').update(Buffer.alloc(0)).digest('hex'),
-				},
-			];
+			{
+				buffer: Buffer.alloc(0),
+				md5: createHash('md5').update(Buffer.alloc(0)).digest('hex'),
+			},
+		];
 }
 
 function getPrecreateReturnType(response: IDataObject): number | undefined {
@@ -640,15 +639,18 @@ function normalizeUploadCookieHeader(cookieHeader: string): string {
 		.join('; ');
 }
 
-async function postUploadChunk(params: {
-	host: string;
-	baseOrigin: string;
-	cookieHeader: string;
-	qs: IDataObject;
-	buffer: Buffer;
-	mimeType: string;
-	fileName: string;
-}): Promise<IDataObject> {
+async function postUploadChunk(
+	this: IExecuteFunctions,
+	params: {
+		host: string;
+		baseOrigin: string;
+		cookieHeader: string;
+		qs: IDataObject;
+		buffer: Buffer;
+		mimeType: string;
+		fileName: string;
+	},
+): Promise<IDataObject> {
 	const boundary = `----n8nTerabox${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
 	const multipartBody = buildMultipartBody(
 		boundary,
@@ -659,7 +661,7 @@ async function postUploadChunk(params: {
 	const url = new URL(`${params.host}/rest/2.0/pcs/superfile2`);
 	url.search = new URLSearchParams(stringifyQueryParams(params.qs)).toString();
 
-	const response = await sendHttpsRequest({
+	const response = await sendHttpsRequest.call(this, {
 		url,
 		method: 'POST',
 		headers: {
@@ -711,37 +713,36 @@ function stringifyQueryParams(qs: IDataObject): Record<string, string> {
 	return Object.fromEntries(Object.entries(qs).map(([key, value]) => [key, String(value)]));
 }
 
-async function sendHttpsRequest(params: {
-	url: URL;
-	method: 'GET' | 'POST';
-	headers?: Record<string, string>;
-	body?: Buffer;
-}): Promise<{ statusCode: number; bodyText: string }> {
-	return await new Promise((resolve, reject) => {
-		const request = httpsRequest(
-			params.url,
-			{
-				method: params.method,
-				headers: params.headers,
-			},
-			(response) => {
-				const chunks: Buffer[] = [];
-				response.on('data', (chunk: Buffer | string) => {
-					chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-				});
-				response.on('end', () => {
-					resolve({
-						statusCode: response.statusCode ?? 0,
-						bodyText: Buffer.concat(chunks).toString('utf8'),
-					});
-				});
-			},
-		);
+async function sendHttpsRequest(
+	this: IExecuteFunctions,
+	params: {
+		url: URL;
+		method: 'GET' | 'POST';
+		headers?: Record<string, string>;
+		body?: Buffer;
+	},
+): Promise<{ statusCode: number; bodyText: string }> {
+	try {
+		const responseData = await this.helpers.httpRequest({
+			method: params.method,
+			url: params.url.toString(),
+			headers: params.headers,
+			body: params.body,
+			returnFullResponse: true,
+		});
 
-		request.on('error', reject);
-		if (params.body && params.body.length > 0) {
-			request.write(params.body);
+		return {
+			statusCode: responseData.statusCode || 200,
+			bodyText: typeof responseData.body === 'string' ? responseData.body : JSON.stringify(responseData.body),
+		};
+	} catch (error) {
+		const candidate = error as { response?: { statusCode?: number, body?: unknown }, statusCode?: number };
+		if (candidate.response) {
+			return {
+				statusCode: candidate.response.statusCode || candidate.statusCode || 500,
+				bodyText: typeof candidate.response.body === 'string' ? candidate.response.body : JSON.stringify(candidate.response.body || {}),
+			};
 		}
-		request.end();
-	});
+		throw error;
+	}
 }

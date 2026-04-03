@@ -1,8 +1,4 @@
-import http from 'http';
-import https from 'https';
-import zlib from 'zlib';
-import type { IncomingHttpHeaders } from 'http';
-import { IDataObject } from 'n8n-workflow';
+import { IDataObject, IExecuteFunctions } from 'n8n-workflow';
 
 const QR_LOGIN_DEFAULT_PAGE_URL = 'https://www.1024terabox.com/ai/index';
 const QR_LOGIN_DEFAULT_LANG = 'en';
@@ -34,7 +30,7 @@ type HttpResponse = {
 	bodyText: string;
 	cookieExpiry?: number;
 	finalUrl: string;
-	headers: IncomingHttpHeaders;
+	headers: Record<string, string | string[]>;
 	statusCode: number;
 };
 
@@ -98,13 +94,16 @@ type StartQrLoginOptions = {
 	regSource?: string;
 };
 
-export async function startQrLogin(options: StartQrLoginOptions = {}): Promise<IDataObject> {
+export async function startQrLogin(
+	this: IExecuteFunctions,
+	options: StartQrLoginOptions = {},
+): Promise<IDataObject> {
 	const initialLoginPageUrl = normalizeQrLoginPageUrl(options.loginPageUrl);
 	const lang = normalizeNonEmptyString(options.lang) ?? QR_LOGIN_DEFAULT_LANG;
 	const regSource = normalizeNonEmptyString(options.regSource) ?? QR_LOGIN_DEFAULT_REG_SOURCE;
 	const cookieJar: CookieJar = {};
 
-	const loginPageResponse = await httpRequest({
+	const loginPageResponse = await httpRequest.call(this, {
 		headers: {
 			Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 			'Accept-Language': buildAcceptLanguage(lang),
@@ -129,7 +128,7 @@ export async function startQrLogin(options: StartQrLoginOptions = {}): Promise<I
 		);
 	}
 
-	const startResponse = await postQrApi<QrCodeStartPayload>({
+	const startResponse = (await postQrApi.call(this, {
 		body: buildQrRequestBody({
 			browserid: browserId,
 			client: 'web',
@@ -143,7 +142,7 @@ export async function startQrLogin(options: StartQrLoginOptions = {}): Promise<I
 		loginOrigin,
 		loginPageUrl,
 		pathname: '/passport/qrcode/get',
-	});
+	})) as QrApiResponse<QrCodeStartPayload>;
 
 	const qrCodePayload = unwrapQrApiPayload(startResponse);
 	const uuid = normalizeNonEmptyString(qrCodePayload.uuid);
@@ -186,7 +185,10 @@ export async function startQrLogin(options: StartQrLoginOptions = {}): Promise<I
 	};
 }
 
-export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
+export async function checkQrLogin(
+	this: IExecuteFunctions,
+	rawState: unknown,
+): Promise<IDataObject> {
 	const state = parseQrLoginState(rawState);
 	const cookieJar: CookieJar = { ...state.cookies };
 	// Use the existing seq for polling; some Baidu implementations require a stable sequence/seed.
@@ -209,14 +211,14 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 		requestParams.v = state.vCode;
 	}
 
-	const checkResponse = await postQrApi<QrCodeCheckPayload>({
+	const checkResponse = (await postQrApi.call(this, {
 		body: buildQrRequestBody(requestParams),
 		jar: cookieJar,
 		lang: state.lang,
 		loginOrigin: state.loginOrigin,
 		loginPageUrl: state.loginPageUrl,
 		pathname: '/passport/qrcode/login',
-	});
+	})) as QrApiResponse<QrCodeCheckPayload>;
 
 	state.cookies = { ...cookieJar };
 
@@ -254,7 +256,7 @@ export async function checkQrLogin(rawState: unknown): Promise<IDataObject> {
 
 	// If we have ndus, we are confirmed regardless of what the internal step was
 	if (foundNdus || payload.userid) {
-		const finalSession = await finalizeQrLoginSession(state, payload);
+		const finalSession = await finalizeQrLoginSession.call(this, state, payload);
 		return {
 			...finalSession,
 			loginState: state,
@@ -340,18 +342,7 @@ function buildQrRequestBody(body: Record<string, string | number>): string {
 	return params.toString();
 }
 
-function decompressResponseBody(body: Buffer, encoding: string | undefined): Buffer {
-	switch ((encoding ?? '').toLowerCase()) {
-		case 'br':
-			return zlib.brotliDecompressSync(body);
-		case 'deflate':
-			return zlib.inflateSync(body);
-		case 'gzip':
-			return zlib.gunzipSync(body);
-		default:
-			return body;
-	}
-}
+// removed decompressResponseBody
 
 function extractDataUrlPayload(dataUrl: string): string {
 	const [, payload = ''] = dataUrl.split(',', 2);
@@ -382,6 +373,7 @@ function extractFirstMatch(content: string, expressions: RegExp[]): string | und
 }
 
 async function fetchSessionLandingPage(
+	this: IExecuteFunctions,
 	state: QrLoginState,
 	jar: CookieJar,
 	payload: QrCodeCheckPayload,
@@ -395,7 +387,7 @@ async function fetchSessionLandingPage(
 
 	for (const candidateUrl of candidateUrls) {
 		try {
-			const response = await httpRequest({
+			const response = await httpRequest.call(this, {
 				headers: {
 					Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 					'Accept-Language': buildAcceptLanguage(state.lang),
@@ -417,6 +409,7 @@ async function fetchSessionLandingPage(
 }
 
 async function finalizeQrLoginSession(
+	this: IExecuteFunctions,
 	state: QrLoginState,
 	payload: QrCodeCheckPayload,
 ): Promise<IDataObject> {
@@ -426,7 +419,7 @@ async function finalizeQrLoginSession(
 		cookieJar.ndus = responseNdus;
 	}
 
-	const landingPageResponse = await fetchSessionLandingPage(state, cookieJar, payload);
+	const landingPageResponse = await fetchSessionLandingPage.call(this, state, cookieJar, payload);
 	if (landingPageResponse.cookieExpiry) {
 		state.cookieExpiry = landingPageResponse.cookieExpiry;
 	}
@@ -518,21 +511,23 @@ function getPendingMessage(step: number): string {
 		: 'Waiting for the QR code to be scanned in the TeraBox mobile app.';
 }
 
-async function httpRequest(config: HttpRequestConfig): Promise<HttpResponse> {
-	return await httpRequestWithRetry(config, 0);
+async function httpRequest(
+	this: IExecuteFunctions,
+	config: HttpRequestConfig,
+): Promise<HttpResponse> {
+	return await httpRequestWithRetry.call(this, config, 0);
 }
 
 async function httpRequestWithRetry(
+	this: IExecuteFunctions,
 	config: HttpRequestConfig,
 	attempt: number,
 ): Promise<HttpResponse> {
 	const jar = config.jar ?? {};
 	const method = config.method ?? 'GET';
 	const requestUrl = new URL(config.url);
-	const isSecure = requestUrl.protocol === 'https:';
 	const requestBody = config.body ? Buffer.from(config.body, 'utf8') : undefined;
 	const headers: Record<string, string> = {
-		'Accept-Encoding': 'gzip, deflate, br',
 		Connection: 'keep-alive',
 		'User-Agent': DEFAULT_USER_AGENT,
 		...(config.headers ?? {}),
@@ -551,103 +546,87 @@ async function httpRequestWithRetry(
 		headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
 	}
 
-	const transport = isSecure ? https : http;
-
 	try {
-		return await new Promise<HttpResponse>((resolve, reject) => {
-			const request = transport.request(
-				{
-					family: 4,
-					hostname: requestUrl.hostname,
-					headers,
-					host: requestUrl.host,
-					path: `${requestUrl.pathname}${requestUrl.search}`,
-					method,
-					port: requestUrl.port || undefined,
-					protocol: requestUrl.protocol,
-					servername: requestUrl.hostname,
-					timeout: config.timeoutMs ?? QR_LOGIN_TIMEOUT_MS,
-				},
-				(incomingMessage) => {
-					const chunks: Buffer[] = [];
-
-					incomingMessage.on('data', (chunk: Buffer | string) => {
-						chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-					});
-
-					incomingMessage.on('end', () => {
-						try {
-							const stickyJar = updateCookieJar(jar, incomingMessage.headers['set-cookie']);
-							const bodyBuffer = Buffer.concat(chunks);
-							const decodedBody = decompressResponseBody(
-								bodyBuffer,
-								normalizeHeaderValue(incomingMessage.headers['content-encoding']),
-							).toString('utf8');
-							const statusCode = incomingMessage.statusCode ?? 0;
-							const location = normalizeHeaderValue(incomingMessage.headers.location);
-
-							if (
-								location &&
-								statusCode >= 300 &&
-								statusCode < 400 &&
-								(config.maxRedirects ?? QR_LOGIN_MAX_REDIRECTS) > 0
-							) {
-								const redirectHeaders = { ...headers };
-								const redirectMethod =
-									statusCode === 303 ||
-									((statusCode === 301 || statusCode === 302) && method === 'POST')
-										? 'GET'
-										: method;
-								delete redirectHeaders.Cookie;
-								if (redirectMethod === 'GET') {
-									delete redirectHeaders['Content-Length'];
-									delete redirectHeaders['Content-Type'];
-								}
-								void httpRequest({
-									headers: redirectHeaders,
-									jar,
-									maxRedirects: (config.maxRedirects ?? QR_LOGIN_MAX_REDIRECTS) - 1,
-									method: redirectMethod,
-									timeoutMs: config.timeoutMs,
-									url: new URL(location, requestUrl).toString(),
-								})
-									.then(resolve)
-									.catch(reject);
-								return;
-							}
-
-							resolve({
-								bodyText: decodedBody,
-								cookieExpiry: stickyJar.earliestExpiry,
-								finalUrl: requestUrl.toString(),
-								headers: incomingMessage.headers,
-								statusCode,
-							});
-						} catch (error) {
-							reject(error);
-						}
-					});
-
-					incomingMessage.on('error', reject);
-				},
-			);
-
-			request.on('timeout', () => {
-				request.destroy(
-					new Error(`Request timed out after ${config.timeoutMs ?? QR_LOGIN_TIMEOUT_MS} ms`),
-				);
-			});
-			request.on('error', reject);
-
-			if (requestBody) {
-				request.write(requestBody);
-			}
-
-			request.end();
+		const response = await this.helpers.httpRequest({
+			url: requestUrl.toString(),
+			method,
+			headers,
+			body: requestBody,
+			returnFullResponse: true,
+			timeout: config.timeoutMs ?? QR_LOGIN_TIMEOUT_MS,
 		});
+
+		const statusCode = response.statusCode ?? 200;
+		const responseHeaders = (response.headers || {}) as Record<string, string | string[]>;
+		const stickyJar = updateCookieJar(jar, responseHeaders['set-cookie']);
+
+		let decodedBody = response.body;
+		if (Buffer.isBuffer(decodedBody)) {
+			decodedBody = decodedBody.toString('utf8');
+		} else if (typeof decodedBody !== 'string') {
+			decodedBody = JSON.stringify(decodedBody);
+		}
+
+		const location = normalizeHeaderValue(responseHeaders.location);
+
+		if (
+			location &&
+			statusCode >= 300 &&
+			statusCode < 400 &&
+			(config.maxRedirects ?? QR_LOGIN_MAX_REDIRECTS) > 0
+		) {
+			const redirectHeaders = { ...headers };
+			const redirectMethod =
+				statusCode === 303 || ((statusCode === 301 || statusCode === 302) && method === 'POST')
+					? 'GET'
+					: method;
+			delete redirectHeaders.Cookie;
+			if (redirectMethod === 'GET') {
+				delete redirectHeaders['Content-Length'];
+				delete redirectHeaders['Content-Type'];
+			}
+			return await httpRequest.call(this, {
+				headers: redirectHeaders,
+				jar,
+				maxRedirects: (config.maxRedirects ?? QR_LOGIN_MAX_REDIRECTS) - 1,
+				method: redirectMethod,
+				timeoutMs: config.timeoutMs,
+				url: new URL(location, requestUrl).toString(),
+			});
+		}
+
+		return {
+			bodyText: decodedBody,
+			cookieExpiry: stickyJar.earliestExpiry,
+			finalUrl: requestUrl.toString(),
+			headers: responseHeaders,
+			statusCode,
+		};
 	} catch (error) {
+		const candidate = error as { response?: { statusCode?: number, headers?: Record<string, string | string[]>, body?: unknown } };
+		if (candidate.response) {
+			const statusCode = candidate.response.statusCode ?? 500;
+			const responseHeaders = (candidate.response.headers || {}) as Record<string, string | string[]>;
+			const stickyJar = updateCookieJar(jar, responseHeaders['set-cookie']);
+			let decodedBodyString: string;
+			if (Buffer.isBuffer(candidate.response.body)) {
+				decodedBodyString = candidate.response.body.toString('utf8');
+			} else if (typeof candidate.response.body === 'string') {
+				decodedBodyString = candidate.response.body;
+			} else {
+				decodedBodyString = JSON.stringify(candidate.response.body || {});
+			}
+			return {
+				bodyText: decodedBodyString,
+				cookieExpiry: stickyJar.earliestExpiry,
+				finalUrl: requestUrl.toString(),
+				headers: responseHeaders,
+				statusCode,
+			};
+		}
+
 		if (shouldRetryRequest(error, attempt)) {
-			return await httpRequestWithRetry(config, attempt + 1);
+			return await httpRequestWithRetry.call(this, config, attempt + 1);
 		}
 
 		throw error;
@@ -784,18 +763,21 @@ function unwrapSingleItemArray(value: unknown): unknown {
 	return value[0];
 }
 
-async function postQrApi<T>(options: {
-	body: string;
-	jar: CookieJar;
-	lang: string;
-	loginOrigin: string;
-	loginPageUrl: string;
-	pathname: string;
-}): Promise<QrApiResponse<T>> {
+async function postQrApi<T>(
+	this: IExecuteFunctions,
+	options: {
+		body: string;
+		jar: CookieJar;
+		lang: string;
+		loginOrigin: string;
+		loginPageUrl: string;
+		pathname: string;
+	},
+): Promise<QrApiResponse<T>> {
 	const apiUrl = new URL(options.pathname, options.loginOrigin);
 	apiUrl.searchParams.set('t', String(Date.now()));
 
-	const response = await httpRequest({
+	const response = await httpRequest.call(this, {
 		body: options.body,
 		headers: {
 			Accept: 'application/json, text/plain, */*',
