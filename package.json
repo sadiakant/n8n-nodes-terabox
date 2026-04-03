@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-terabox",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Professional n8n community node for advanced TeraBox cloud storage automation. Features secure QR login, batch file operations (upload/download/search), and M3U8 media streaming. Enable share folder access and granular filtering for seamless workflow integration. The most robust TeraBox integration for production-ready n8n automations.",
   "license": "MIT",
   "homepage": "https://github.com/sadiakant/n8n-nodes-terabox",
