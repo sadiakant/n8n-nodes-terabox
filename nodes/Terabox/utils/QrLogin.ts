@@ -603,10 +603,19 @@ async function httpRequestWithRetry(
 			statusCode,
 		};
 	} catch (error) {
-		const candidate = error as { response?: { statusCode?: number, headers?: Record<string, string | string[]>, body?: unknown } };
+		const candidate = error as {
+			response?: {
+				statusCode?: number;
+				headers?: Record<string, string | string[]>;
+				body?: unknown;
+			};
+		};
 		if (candidate.response) {
 			const statusCode = candidate.response.statusCode ?? 500;
-			const responseHeaders = (candidate.response.headers || {}) as Record<string, string | string[]>;
+			const responseHeaders = (candidate.response.headers || {}) as Record<
+				string,
+				string | string[]
+			>;
 			const stickyJar = updateCookieJar(jar, responseHeaders['set-cookie']);
 			let decodedBodyString: string;
 			if (Buffer.isBuffer(candidate.response.body)) {

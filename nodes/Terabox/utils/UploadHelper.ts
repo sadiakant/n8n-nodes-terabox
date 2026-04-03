@@ -555,11 +555,11 @@ function createUploadChunks(binaryDataBuffer: Buffer): Array<{ buffer: Buffer; m
 	return chunks.length > 0
 		? chunks
 		: [
-			{
-				buffer: Buffer.alloc(0),
-				md5: createHash('md5').update(Buffer.alloc(0)).digest('hex'),
-			},
-		];
+				{
+					buffer: Buffer.alloc(0),
+					md5: createHash('md5').update(Buffer.alloc(0)).digest('hex'),
+				},
+			];
 }
 
 function getPrecreateReturnType(response: IDataObject): number | undefined {
@@ -733,14 +733,23 @@ async function sendHttpsRequest(
 
 		return {
 			statusCode: responseData.statusCode || 200,
-			bodyText: typeof responseData.body === 'string' ? responseData.body : JSON.stringify(responseData.body),
+			bodyText:
+				typeof responseData.body === 'string'
+					? responseData.body
+					: JSON.stringify(responseData.body),
 		};
 	} catch (error) {
-		const candidate = error as { response?: { statusCode?: number, body?: unknown }, statusCode?: number };
+		const candidate = error as {
+			response?: { statusCode?: number; body?: unknown };
+			statusCode?: number;
+		};
 		if (candidate.response) {
 			return {
 				statusCode: candidate.response.statusCode || candidate.statusCode || 500,
-				bodyText: typeof candidate.response.body === 'string' ? candidate.response.body : JSON.stringify(candidate.response.body || {}),
+				bodyText:
+					typeof candidate.response.body === 'string'
+						? candidate.response.body
+						: JSON.stringify(candidate.response.body || {}),
 			};
 		}
 		throw error;

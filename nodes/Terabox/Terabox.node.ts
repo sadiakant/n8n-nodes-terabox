@@ -292,13 +292,13 @@ export class Terabox implements INodeType {
 								: undefined;
 							const modeFilteredEntries = categoryFilteredEntries
 								? filterTeraboxEntriesByListMode(categoryFilteredEntries, {
-									listMode,
-									lastDays,
-									lastHours,
-									fromDate,
-									toDate,
-									invertOutput,
-								})
+										listMode,
+										lastDays,
+										lastHours,
+										fromDate,
+										toDate,
+										invertOutput,
+									})
 								: undefined;
 							if (modeFilteredEntries) {
 								const sortedEntries = sortTeraboxEntries(

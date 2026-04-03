@@ -1,4 +1,4 @@
-![TeraBox Banner](https://raw.githubusercontent.com/sadiakant/n8n-nodes-terabox/refs/heads/main/docs/assets/n8n-nodes-terabox.png)
+![TeraBox Banner](https://raw.githubusercontent.com/sadiakant/n8n-nodes-terabox/refs/heads/main/docs/assets/n8n-nodes-terabox.webp)
 
 # TeraBox - n8n Integration
 
@@ -7,7 +7,7 @@
 <h4 align="center"> Join Our Telegram Group for Help and Support</h4>
 <p align="center"> 
   <a href="https://t.me/n8n_nodes_0">
-    <img src="./docs/assets/n8n_nodes_0.png" alt="n8n_nodes_0" width="220" />
+    <img src="./docs/assets/n8n_nodes_0.webp" alt="n8n_nodes_0" width="220" />
   </a>
 </p>
 

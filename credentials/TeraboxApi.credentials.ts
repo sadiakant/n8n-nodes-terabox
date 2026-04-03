@@ -4,7 +4,8 @@ export class TeraboxApi implements ICredentialType {
 	name = 'teraboxApi';
 	displayName = 'TeraBox Session API';
 	icon = 'file:terabox.svg' as const;
-	documentationUrl = 'https://github.com/sadiakant/n8n-nodes-terabox/blob/main/docs/AUTHORIZATION_GUIDE.md';
+	documentationUrl =
+		'https://github.com/sadiakant/n8n-nodes-terabox/blob/main/docs/AUTHORIZATION_GUIDE.md';
 
 	properties: INodeProperties[] = [
 		{

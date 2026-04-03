@@ -43,10 +43,10 @@
     "build": "n8n-node build",
     "build:watch": "tsc --watch",
     "dev": "n8n-node dev",
-    "format": "prettier  --write credentials nodes/Terabox",
+    "format": "prettier credentials nodes/Terabox --write",
     "lint": "n8n-node lint",
     "lint:fix": "n8n-node lint --fix",
-    "n8n-scan": "npm dlx @n8n/scan-community-package .",
+    "n8n-scan": "npx @n8n/scan-community-package .",
     "test": "n8n-node lint && n8n-node build",
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
@@ -66,10 +66,10 @@
   },
   "devDependencies": {
     "@n8n/node-cli": "*",
-    "eslint": "9.32.0",
-    "prettier": "3.6.2",
-    "release-it": "^19.0.4",
-    "typescript": "5.9.2"
+    "eslint": "9.39.4",
+    "prettier": "3.8.1",
+    "release-it": "19.2.4",
+    "typescript": "5.9.3"
   },
   "peerDependencies": {
     "n8n-workflow": "*"
