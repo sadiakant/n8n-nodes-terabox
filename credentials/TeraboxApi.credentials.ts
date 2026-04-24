@@ -9,8 +9,8 @@ export class TeraboxApi implements ICredentialType {
 
 	properties: INodeProperties[] = [
 		{
-			displayName: 'Cookie Header',
-			name: 'cookieHeader',
+			displayName: 'NDUS Token',
+			name: 'ndusToken',
 			type: 'string',
 			typeOptions: {
 				password: true,
@@ -18,30 +18,7 @@ export class TeraboxApi implements ICredentialType {
 			default: '',
 			required: true,
 			description:
-				'Full Cookie request header copied from an authenticated TeraBox/Nephobox web request, or the cookieHeader returned by Check QR Login',
-		},
-		{
-			displayName: 'JS Token',
-			name: 'jsToken',
-			type: 'string',
-			typeOptions: {
-				password: true,
-			},
-			default: '',
-			required: true,
-			description:
-				'The jsToken query parameter from an authenticated TeraBox/Nephobox web request, or the jsToken returned by Check QR Login',
-		},
-		{
-			displayName: 'BDSToken',
-			name: 'bdstoken',
-			type: 'string',
-			typeOptions: {
-				password: true,
-			},
-			default: '',
-			description:
-				'Optional. Used by some mutating account operations such as file management and share copy',
+				'The ndus authentication token from Complete QR Login. This single token provides permanent login — all other session values (jsToken, bdstoken, cookies) are auto-derived.',
 		},
 		{
 			displayName: 'Base URL',
@@ -56,14 +33,13 @@ export class TeraboxApi implements ICredentialType {
 		request: {
 			baseURL: '={{$credentials.baseUrl || "https://dm.nephobox.com"}}',
 			headers: {
-				Cookie: '={{$credentials.cookieHeader}}',
+				Cookie: '={{"ndus=" + $credentials.ndusToken}}',
 			},
 			method: 'GET',
 			qs: {
 				app_id: '250528',
 				channel: 'dubox',
 				clienttype: '0',
-				jsToken: '={{$credentials.jsToken}}',
 				web: 1,
 			},
 			url: '/api/check/login',

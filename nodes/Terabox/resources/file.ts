@@ -165,7 +165,7 @@ export const fileFields: INodeProperties[] = [
 			minValue: 1,
 		},
 		default: 24,
-		description: 'Return files changed within the last N hours',
+		description: 'Return files changed within the last N rolling hours from now',
 	},
 	{
 		displayName: 'Last Days',
@@ -182,7 +182,7 @@ export const fileFields: INodeProperties[] = [
 			minValue: 1,
 		},
 		default: 7,
-		description: 'Return files changed within the last N days',
+		description: 'Return files changed from today back through the previous N-1 calendar days',
 	},
 	{
 		displayName: 'From Date',

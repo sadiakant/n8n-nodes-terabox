@@ -45,8 +45,46 @@ This guide helps you resolve common issues when using the n8n TeraBox node.
 **Prevention:**
 
 - Regularly check session validity using **Validate Session**
+- Use **Refresh Session Tokens** for automatic token renewal
 - Monitor session expiration dates
 - Set up automated session renewal workflows
+
+---
+
+### Verification Required (errno 450016)
+
+**Error Messages:**
+
+- "TeraBox is asking for an additional verification step"
+- "need verify" in error message
+- errno 450016
+
+**Causes:**
+
+- TeraBox requires additional verification (CAPTCHA, 2FA, etc.)
+- Account security measures triggered
+- Unusual login patterns detected
+
+**Solutions:**
+
+1. Manual Verification:
+   - Open TeraBox website in browser
+   - Complete any verification prompts
+   - Refresh session tokens manually
+
+2. Use Refresh Session Tokens:
+   - Run **Refresh Session Tokens** operation
+   - This will attempt to extract fresh tokens from verified session
+
+3. Re-authenticate if needed:
+   - If verification fails, use QR Login for fresh session
+   - Update credentials with new ndus token
+
+**Prevention:**
+
+- Avoid rapid successive API calls
+- Use reasonable delays between operations
+- Monitor for verification prompts in browser
 
 ---
 

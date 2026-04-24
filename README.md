@@ -126,13 +126,13 @@ For detailed documentation of all operations with parameters, examples, and use 
 
 ## 🔧 Available Operations
 
-| Resource           | Operations                                                                               |
-| ------------------ | ---------------------------------------------------------------------------------------- |
-| **Authentication** | Start QR Login, Check QR Login, Complete QR Login, Validate Session, Session Diagnostics |
-| **User**           | Get Info, Get Quota                                                                      |
-| **File**           | List, Search, Get Metadata, Download, Upload, Delete, Copy, Move, Rename                 |
-| **Share**          | Activate, Verify, Query, List, Copy                                                      |
-| **Media**          | Stream URL, Share Stream URL, Metadata                                                   |
+| Resource           | Operations                                                                                                       |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| **Authentication** | Start QR Login, Check QR Login, Complete QR Login, Refresh Session Tokens, Validate Session, Session Diagnostics |
+| **User**           | Get Info, Get Quota                                                                                              |
+| **File**           | List, Search, Get Metadata, Download, Upload, Delete, Copy, Move, Rename                                         |
+| **Share**          | Activate, Verify, Query, List, Copy                                                                              |
+| **Media**          | Stream URL, Share Stream URL, Metadata                                                                           |
 
 ## 🛡️ Security Features
 
@@ -258,7 +258,7 @@ Use numeric codes for file categories:
 Filter files by modification time:
 
 - **Last Hours**: Items modified in last N hours
-- **Last Days**: Items modified in last N days
+- **Last Days**: Items modified from today back through the previous N-1 calendar days
 - **Custom Range**: From/To date in ISO format
 
 ### **Batch Operations**

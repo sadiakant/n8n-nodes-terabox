@@ -12,11 +12,16 @@ import {
 import { authenticationDescription, authenticationFields } from './resources/authentication';
 import { fileDescription, fileFields } from './resources/file';
 import { mediaDescription, mediaFields } from './resources/media';
-import { checkQrLogin, startQrLogin } from './utils/QrLogin';
+import { checkQrLogin, refreshSessionCredentials, startQrLogin } from './utils/QrLogin';
 import { shareDescription, shareFields } from './resources/share';
 import { userDescription, userFields } from './resources/user';
 import { teraboxApiRequest, teraboxTextRequest } from './utils/api';
-import { getSessionDiagnostics, getTeraboxSession } from './utils/SessionAuth';
+import {
+	buildTeraboxHeaders,
+	getSessionDiagnostics,
+	getTeraboxSession,
+	refreshTeraboxSession,
+} from './utils/SessionAuth';
 import { uploadTeraboxFile } from './utils/UploadHelper';
 
 export class Terabox implements INodeType {
@@ -148,6 +153,17 @@ export class Terabox implements INodeType {
 								pairedItem: { item: i },
 							});
 						}
+					} else if (operation === 'refreshSession') {
+						const responseData = await refreshSessionCredentials.call(this);
+						returnData.push({
+							json: buildOperationOutput(
+								resource,
+								operation,
+								formatRefreshSessionOutput(responseData),
+								'Session tokens refreshed successfully.',
+							),
+							pairedItem: { item: i },
+						});
 					} else {
 						const session = await getTeraboxSession.call(this);
 
@@ -193,6 +209,8 @@ export class Terabox implements INodeType {
 						});
 					}
 				} else if (resource === 'file') {
+					let deletedFilePaths: string[] = []; // Store deleted paths for delete operation
+
 					if (operation === 'list') {
 						const dir = this.getNodeParameter('dir', i) as string;
 						const categoryFilter = this.getNodeParameter('categoryFilter', i, 'all') as string;
@@ -265,6 +283,22 @@ export class Terabox implements INodeType {
 									sortBy,
 									sortAscending,
 								);
+								if (sortedEntries.length === 0) {
+									returnData.push({
+										json: buildEmptyTeraboxCollectionOutput(
+											resource,
+											operation,
+											categoryResponse,
+											'List completed successfully. No files matched the selected directory and filters.',
+											{
+												dir: normalizeDirPath(dir),
+												matchedCount: 0,
+											},
+										),
+										pairedItem: { item: i },
+									});
+									continue;
+								}
 								for (const entry of sortedEntries) {
 									returnData.push({
 										json: formatTeraboxListEntry(
@@ -306,6 +340,22 @@ export class Terabox implements INodeType {
 									sortBy,
 									sortAscending,
 								);
+								if (sortedEntries.length === 0) {
+									returnData.push({
+										json: buildEmptyTeraboxCollectionOutput(
+											resource,
+											operation,
+											responseData,
+											'List completed successfully. No files matched the selected directory and filters.',
+											{
+												dir: normalizeDirPath(dir),
+												matchedCount: 0,
+											},
+										),
+										pairedItem: { item: i },
+									});
+									continue;
+								}
 								for (const entry of sortedEntries) {
 									returnData.push({
 										json: formatTeraboxListEntry(
@@ -379,6 +429,24 @@ export class Terabox implements INodeType {
 
 						const dedupedEntries = dedupeTeraboxEntries(allSearchEntries);
 						const searchEntries = filterTeraboxEntriesByCategory(dedupedEntries, categoryFilter);
+						if (searchEntries.length === 0) {
+							returnData.push({
+								json: buildEmptyTeraboxCollectionOutput(
+									resource,
+									operation,
+									firstPageResponse,
+									'Search completed successfully. No files matched the search query and filters.',
+									{
+										key,
+										matchedCount: 0,
+									},
+								),
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+
+						let emittedSearchEntries = 0;
 						for (const entry of searchEntries) {
 							const identity = getTeraboxEntryIdentity(entry);
 							if (identity && globalSearchSeen.has(identity)) {
@@ -392,6 +460,23 @@ export class Terabox implements INodeType {
 									entry && typeof entry === 'object'
 										? (entry as IDataObject)
 										: ({ value: entry } as IDataObject),
+								),
+								pairedItem: { item: i },
+							});
+							emittedSearchEntries += 1;
+						}
+
+						if (emittedSearchEntries === 0) {
+							returnData.push({
+								json: buildEmptyTeraboxCollectionOutput(
+									resource,
+									operation,
+									firstPageResponse,
+									'Search completed successfully. All matching files were already emitted earlier in this execution.',
+									{
+										key,
+										matchedCount: 0,
+									},
 								),
 								pairedItem: { item: i },
 							});
@@ -436,6 +521,7 @@ export class Terabox implements INodeType {
 									itemIndex: i,
 								});
 							}
+							deletedFilePaths = pathList; // Capture paths for delete operation
 							filelistJson = JSON.stringify(pathList);
 						} else if (operation === 'copy' || operation === 'move') {
 							const destinationPath = (
@@ -522,7 +608,7 @@ export class Terabox implements INodeType {
 							filelistJson = JSON.stringify(objList);
 						}
 
-						const session = await getTeraboxSession.call(this);
+						let session = await getTeraboxSession.call(this);
 						if (!session.bdstoken) {
 							throw new NodeOperationError(
 								this.getNode(),
@@ -531,45 +617,63 @@ export class Terabox implements INodeType {
 							);
 						}
 
-						// TeraBox filemanager requires opera/async in query string, filelist as URL-encoded form body
-						const fmQs: IDataObject = {
-							app_id: '250528',
-							async: 2,
-							bdstoken: session.bdstoken,
-							channel: 'dubox',
-							clienttype: 0,
-							'dp-logid': `${Date.now()}0001`,
-							jsToken: session.jsToken,
-							opera: operation,
-							web: 1,
+						// Helper: build and execute a filemanager POST with the given session
+						const executeFileManagerPost = async (
+							fmSession: typeof session,
+						): Promise<IDataObject> => {
+							const webOrigin = deriveTeraboxOrigin(fmSession.baseUrl);
+							const fmQs: IDataObject = {
+								app_id: '250528',
+								async: 2,
+								bdstoken: fmSession.bdstoken,
+								channel: 'dubox',
+								clienttype: 0,
+								'dp-logid': `${Date.now()}0001`,
+								jsToken: fmSession.jsToken,
+								opera: operation,
+								web: 1,
+							};
+							if (operation === 'copy' || operation === 'move') {
+								fmQs.ondup = 'fail';
+								fmQs.onnest = 'fail';
+							}
+							return (await this.helpers.httpRequest({
+								method: 'POST',
+								url: `${fmSession.baseUrl}/api/filemanager`,
+								headers: {
+									...buildTeraboxHeaders(fmSession),
+									Origin: webOrigin,
+									Referer: `${webOrigin}/main?category=all&path=%2F`,
+									'X-Requested-With': 'XMLHttpRequest',
+								},
+								qs: fmQs,
+								body: `filelist=${encodeURIComponent(filelistJson)}`,
+								json: true,
+							})) as IDataObject;
 						};
 
-						if (operation === 'copy' || operation === 'move') {
-							fmQs.ondup = 'fail';
-							fmQs.onnest = 'fail';
-						}
+						// Execute with auto-retry on errno 450016 (need verify / session expired)
+						let responseData = await executeFileManagerPost(session);
 
-						const responseData = (await this.helpers.httpRequest({
-							method: 'POST',
-							url: `${session.baseUrl}/api/filemanager`,
-							headers: {
-								Accept: 'application/json, text/plain, */*',
-								'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-								Cookie: session.cookieHeader,
-								Origin: session.baseUrl,
-								Referer: `${session.baseUrl}/main?category=all&path=%2F`,
-								'User-Agent':
-									'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-							},
-							qs: fmQs,
-							body: `filelist=${encodeURIComponent(filelistJson)}`,
-							json: true,
-						})) as IDataObject;
+						if (
+							typeof responseData.errno === 'number' &&
+							(responseData.errno === 450016 ||
+								responseData.errno === -6 ||
+								responseData.errno === 111)
+						) {
+							// Auto-refresh session tokens and retry once
+							try {
+								session = await refreshTeraboxSession(this, session);
+								responseData = await executeFileManagerPost(session);
+							} catch {
+								// Refresh failed — fall through to error handler below
+							}
+						}
 
 						if (typeof responseData.errno === 'number' && responseData.errno !== 0) {
 							throw new NodeOperationError(
 								this.getNode(),
-								`TeraBox filemanager returned error code ${responseData.errno}: ${responseData.show_msg || responseData.errmsg || 'Unknown error'}`,
+								`TeraBox filemanager returned error code ${responseData.errno}: ${getFileManagerErrorMessage(responseData, session.baseUrl)}`,
 								{ itemIndex: i },
 							);
 						}
@@ -577,7 +681,9 @@ export class Terabox implements INodeType {
 						const outputData =
 							operation === 'rename'
 								? addRenameOutputDetails(responseData, renameEntries)
-								: responseData;
+								: operation === 'delete'
+									? addDeleteOutputDetails(responseData, deletedFilePaths)
+									: responseData;
 
 						returnData.push({
 							json: buildOperationOutput(
@@ -1022,16 +1128,14 @@ function formatCompleteQrLoginOutput(responseData: IDataObject): IDataObject {
 		return {
 			status,
 			accountName: responseData.displayName || responseData.userId || 'Unknown',
-			cookieHeader: responseData.cookieHeader,
-			jsToken: responseData.jsToken,
-			bdstoken: responseData.bdstoken,
+			ndusToken: responseData.ndus,
 			baseUrl: responseData.baseUrl,
-			cookieExpiryDate: responseData.cookieExpiry
-				? new Date(responseData.cookieExpiry as number).toISOString()
-				: 'Not explicitly provided by API (Session typically lasts ~30 days)',
-			importantNote:
-				'IMPORTANT: Save these Cookies to Local PC or Other safe Place for Fillup in future credentials.',
-			loginStateJson: responseData.loginStateJson,
+			credential: {
+				ndusToken: responseData.ndus,
+				baseUrl: responseData.baseUrl,
+			},
+			message:
+				'Copy the ndusToken value into your TeraBox credential. This single token provides permanent login — all other session values are auto-derived.',
 		};
 	}
 
@@ -1040,6 +1144,16 @@ function formatCompleteQrLoginOutput(responseData: IDataObject): IDataObject {
 		status,
 		message: responseData.message || 'QR login is not yet completed. Please check scan status.',
 		loginStateJson: responseData.loginStateJson,
+	};
+}
+
+function formatRefreshSessionOutput(responseData: IDataObject): IDataObject {
+	return {
+		status: responseData.status || 'refreshed',
+		baseUrl: responseData.baseUrl,
+		sessionStillValid: responseData.sessionStillValid,
+		message:
+			'Session tokens refreshed automatically. No manual action needed — your ndusToken credential handles everything.',
 	};
 }
 
@@ -1097,6 +1211,27 @@ function buildOperationOutput(
 	};
 }
 
+function buildEmptyTeraboxCollectionOutput(
+	resource: string,
+	operation: string,
+	responseData: IDataObject,
+	summary: string,
+	extraFields: IDataObject = {},
+): IDataObject {
+	const collectionKey = getTeraboxEntriesKey(responseData);
+
+	return buildOperationOutput(
+		resource,
+		operation,
+		{
+			...responseData,
+			...extraFields,
+			[collectionKey ?? 'list']: [],
+		},
+		summary,
+	);
+}
+
 function getFileManagerOperationSummary(operation: string, responseData: IDataObject): string {
 	const taskId = normalizeString(responseData.taskid ?? responseData.taskId);
 	const infoCount = Array.isArray(responseData.info) ? responseData.info.length : undefined;
@@ -1110,6 +1245,30 @@ function getFileManagerOperationSummary(operation: string, responseData: IDataOb
 	}
 
 	return `${toSentenceCase(operation)} request completed successfully.`;
+}
+
+function getFileManagerErrorMessage(responseData: IDataObject, baseUrl: string): string {
+	const rawMessage =
+		(typeof responseData.show_msg === 'string' && responseData.show_msg) ||
+		(typeof responseData.errmsg === 'string' && responseData.errmsg) ||
+		'Unknown error';
+	const errno = typeof responseData.errno === 'number' ? responseData.errno : undefined;
+	const normalizedMessage = rawMessage.toLowerCase();
+
+	if (errno === 450016 || normalizedMessage.includes('need verify')) {
+		const origin = deriveTeraboxOrigin(baseUrl);
+		return `${rawMessage}. TeraBox is asking for an additional verification step for this session. Open ${origin} in a browser, complete any verification prompt, then refresh Cookie Header, JS Token, and BDSToken from the same authenticated session/origin before retrying.`;
+	}
+
+	return rawMessage;
+}
+
+function deriveTeraboxOrigin(baseUrl: string): string {
+	try {
+		return new URL(baseUrl).origin;
+	} catch {
+		return baseUrl;
+	}
 }
 
 function addRenameOutputDetails(
@@ -1127,6 +1286,37 @@ function addRenameOutputDetails(
 		...responseData,
 		OldName: oldNames.length === 1 ? oldNames[0] : oldNames,
 		NewName: newNames.length === 1 ? newNames[0] : newNames,
+	};
+}
+
+function addDeleteOutputDetails(
+	responseData: IDataObject,
+	deletedFilePaths: string[],
+): IDataObject {
+	if (!Array.isArray(deletedFilePaths) || deletedFilePaths.length === 0) {
+		return responseData;
+	}
+
+	const deletedItems = deletedFilePaths.map((path) => {
+		const name = extractNameFromPath(path);
+		const isDirectory = !name.includes('.') || path.endsWith('/');
+
+		return {
+			path,
+			name,
+			type: isDirectory ? 'folder' : 'file',
+			isDirectory,
+		};
+	});
+
+	return {
+		...responseData,
+		deletedFiles: {
+			count: deletedFilePaths.length,
+			paths: deletedFilePaths,
+			items: deletedItems,
+			summary: `Deleted ${deletedFilePaths.length} item${deletedFilePaths.length === 1 ? '' : 's'}`,
+		},
 	};
 }
 
@@ -1176,6 +1366,18 @@ function extractItemCount(responseData: IDataObject): number | undefined {
 	const list = responseData.list;
 	if (Array.isArray(list)) {
 		return list.length;
+	}
+
+	return undefined;
+}
+
+function getTeraboxEntriesKey(responseData: IDataObject): 'info' | 'list' | undefined {
+	if (Array.isArray(responseData.info)) {
+		return 'info';
+	}
+
+	if (Array.isArray(responseData.list)) {
+		return 'list';
 	}
 
 	return undefined;
@@ -1297,7 +1499,9 @@ function filterTeraboxEntriesByListMode(
 	if (params.listMode === 'lastHours') {
 		minTimeMs = nowMs - Math.max(0, params.lastHours) * 60 * 60 * 1000;
 	} else if (params.listMode === 'lastDays') {
-		minTimeMs = nowMs - Math.max(0, params.lastDays) * 24 * 60 * 60 * 1000;
+		// "Last Days" is expected to behave as calendar days:
+		// today counts as day 1, then the previous N-1 local dates are included.
+		minTimeMs = getLocalDayWindowStartMs(nowMs, params.lastDays);
 	} else if (params.listMode === 'dateRange') {
 		const fromMs = Date.parse(params.fromDate);
 		const toMs = Date.parse(params.toDate);
@@ -1333,6 +1537,22 @@ function filterTeraboxEntriesByListMode(
 	return filteredEntries;
 }
 
+function getLocalDayWindowStartMs(nowMs: number, days: number): number {
+	const normalizedDays = Math.max(1, Math.floor(days));
+	const now = new Date(nowMs);
+	const localDayStartMs = new Date(
+		now.getFullYear(),
+		now.getMonth(),
+		now.getDate(),
+		0,
+		0,
+		0,
+		0,
+	).getTime();
+
+	return localDayStartMs - (normalizedDays - 1) * 24 * 60 * 60 * 1000;
+}
+
 function getTeraboxEntryChangeTimeMs(entry: unknown): number | undefined {
 	if (!entry || typeof entry !== 'object') {
 		return undefined;
@@ -1360,28 +1580,38 @@ function sortTeraboxEntries(entries: unknown[], sortBy: string, ascending: boole
 		const rightObj = right && typeof right === 'object' ? (right as IDataObject) : undefined;
 
 		let compareResult = 0;
-		if (sortBy === 'fileName') {
+		switch (sortBy) {
+			case 'fileName': {
+				const leftName = normalizeString(leftObj?.server_filename) ?? '';
+				const rightName = normalizeString(rightObj?.server_filename) ?? '';
+				compareResult = leftName.localeCompare(rightName, undefined, {
+					numeric: true,
+					sensitivity: 'base',
+				});
+				break;
+			}
+			case 'size': {
+				const leftSize = normalizeNumber(leftObj?.size) ?? 0;
+				const rightSize = normalizeNumber(rightObj?.size) ?? 0;
+				compareResult = leftSize - rightSize;
+				break;
+			}
+			case 'changeTime':
+			default: {
+				const leftTime = getTeraboxEntryChangeTimeMs(leftObj) ?? 0;
+				const rightTime = getTeraboxEntryChangeTimeMs(rightObj) ?? 0;
+				compareResult = leftTime - rightTime;
+				break;
+			}
+		}
+
+		if (compareResult === 0) {
 			const leftName = normalizeString(leftObj?.server_filename) ?? '';
 			const rightName = normalizeString(rightObj?.server_filename) ?? '';
-			compareResult = leftName.localeCompare(rightName);
-		} else if (sortBy === 'size') {
-			const leftSize = normalizeNumber(leftObj?.size) ?? 0;
-			const rightSize = normalizeNumber(rightObj?.size) ?? 0;
-			compareResult = leftSize - rightSize;
-		} else {
-			const leftTime =
-				normalizeNumber(leftObj?.server_mtime) ??
-				normalizeNumber(leftObj?.local_mtime) ??
-				normalizeNumber(leftObj?.server_ctime) ??
-				normalizeNumber(leftObj?.local_ctime) ??
-				0;
-			const rightTime =
-				normalizeNumber(rightObj?.server_mtime) ??
-				normalizeNumber(rightObj?.local_mtime) ??
-				normalizeNumber(rightObj?.server_ctime) ??
-				normalizeNumber(rightObj?.local_ctime) ??
-				0;
-			compareResult = leftTime - rightTime;
+			compareResult = leftName.localeCompare(rightName, undefined, {
+				numeric: true,
+				sensitivity: 'base',
+			});
 		}
 
 		return ascending ? compareResult : -compareResult;

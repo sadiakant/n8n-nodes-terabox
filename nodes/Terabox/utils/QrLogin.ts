@@ -1,4 +1,5 @@
 import { IDataObject, IExecuteFunctions } from 'n8n-workflow';
+import { getTeraboxSession } from './SessionAuth';
 
 const QR_LOGIN_DEFAULT_PAGE_URL = 'https://www.1024terabox.com/ai/index';
 const QR_LOGIN_DEFAULT_LANG = 'en';
@@ -294,6 +295,70 @@ export async function checkQrLogin(
 
 	// Stay in pending_confirm state
 	return buildPendingQrResponse(state, responseMessage);
+}
+
+export async function refreshSessionCredentials(this: IExecuteFunctions): Promise<IDataObject> {
+	const session = await getTeraboxSession.call(this);
+	const cookieJar = parseCookieHeader(session.cookieHeader);
+	const baseOrigin = normalizeOrigin(session.baseUrl);
+	const candidateUrls = [
+		`${baseOrigin}/main?category=all&path=%2F`,
+		`${baseOrigin}/main`,
+		baseOrigin,
+	];
+
+	for (const candidateUrl of candidateUrls) {
+		try {
+			const response = await httpRequest.call(this, {
+				headers: {
+					Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+					'Accept-Language': buildAcceptLanguage('en'),
+				},
+				jar: cookieJar,
+				method: 'GET',
+				url: candidateUrl,
+			});
+			const tokens = extractPageTokens(response.bodyText);
+			if (!tokens.jsToken) {
+				continue;
+			}
+
+			const finalOrigin = normalizeOrigin(response.finalUrl);
+			const cookieHeader = buildCookieHeader(cookieJar);
+			const bdstoken = tokens.bdstoken ?? session.bdstoken ?? '';
+			return {
+				ok: true,
+				status: 'refreshed',
+				baseUrl: finalOrigin,
+				bdstoken,
+				cookieHeader,
+				cookieNames: Object.keys(cookieJar).sort(),
+				cookieExpiry: response.cookieExpiry,
+				credentials: {
+					baseUrl: finalOrigin,
+					bdstoken,
+					cookieHeader,
+					jsToken: tokens.jsToken,
+				},
+				jsToken: tokens.jsToken,
+				message:
+					'Session tokens refreshed successfully. Save these returned values back into your n8n credential.',
+				sessionStillValid: true,
+				tokensChanged: {
+					baseUrlChanged: finalOrigin !== session.baseUrl,
+					bdstokenChanged: bdstoken !== (session.bdstoken ?? ''),
+					cookieHeaderChanged: cookieHeader !== session.cookieHeader,
+					jsTokenChanged: tokens.jsToken !== session.jsToken,
+				},
+			};
+		} catch {
+			continue;
+		}
+	}
+
+	throw new Error(
+		'Could not refresh session tokens from the current authenticated session. The session may already be expired or TeraBox may require a fresh QR login.',
+	);
 }
 
 function buildAcceptLanguage(lang: string): string {
@@ -677,6 +742,39 @@ function normalizeNumber(value: unknown): number | undefined {
 function normalizeQrLoginPageUrl(input?: string): string {
 	const target = normalizeNonEmptyString(input) ?? QR_LOGIN_DEFAULT_PAGE_URL;
 	return new URL(target).toString();
+}
+
+function normalizeOrigin(url: string): string {
+	try {
+		return new URL(url).origin;
+	} catch {
+		return url.replace(/\/+$/, '');
+	}
+}
+
+function parseCookieHeader(cookieHeader: string): CookieJar {
+	const jar: CookieJar = {};
+
+	for (const rawPart of cookieHeader.split(';')) {
+		const part = rawPart.trim();
+		if (!part) {
+			continue;
+		}
+
+		const separatorIndex = part.indexOf('=');
+		if (separatorIndex <= 0) {
+			continue;
+		}
+
+		const name = part.slice(0, separatorIndex).trim();
+		const value = part.slice(separatorIndex + 1).trim();
+
+		if (name) {
+			jar[name] = value;
+		}
+	}
+
+	return jar;
 }
 
 function parseQrLoginState(rawState: unknown): QrLoginState {

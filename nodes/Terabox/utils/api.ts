@@ -6,7 +6,12 @@ import {
 	IHttpRequestOptions,
 	ILoadOptionsFunctions,
 } from 'n8n-workflow';
-import { buildTeraboxHeaders, buildTeraboxQuery, getTeraboxSession } from './SessionAuth';
+import {
+	buildTeraboxHeaders,
+	buildTeraboxQuery,
+	getTeraboxSession,
+	refreshTeraboxSession,
+} from './SessionAuth';
 
 type TeraboxContext = IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions;
 
@@ -21,8 +26,12 @@ type TeraboxRequestOptions = {
 
 type TeraboxRawResponse = Buffer | IDataObject | string;
 
+/** Errno codes that indicate the session tokens are stale and can be auto-refreshed. */
+const SESSION_EXPIRED_ERRNO = new Set([-6, 111]);
+
 /**
  * Make a JSON API request to TeraBox using the desktop/browser session model.
+ * Automatically refreshes session tokens and retries once on errno -6 / 111.
  */
 export async function teraboxApiRequest(
 	this: TeraboxContext,
@@ -45,6 +54,31 @@ export async function teraboxApiRequest(
 
 	if (typeof responseData.errno === 'number' && responseData.errno !== 0) {
 		const errno = responseData.errno as number;
+
+		// ─── Auto-refresh retry for session-expired errors ──────────────
+		if (SESSION_EXPIRED_ERRNO.has(errno)) {
+			try {
+				const currentSession = await getTeraboxSession.call(this);
+				await refreshTeraboxSession(this, currentSession);
+
+				// Retry the request with refreshed session
+				const retryData = await teraboxRequest.call(this, method, endpoint, body, qs, options);
+				if (
+					typeof retryData === 'object' &&
+					retryData !== null &&
+					!Array.isArray(retryData) &&
+					!Buffer.isBuffer(retryData)
+				) {
+					const retryErrno = typeof retryData.errno === 'number' ? retryData.errno : undefined;
+					if (retryErrno === undefined || retryErrno === 0) {
+						return retryData;
+					}
+				}
+			} catch {
+				// Refresh or retry failed — fall through to throw original error
+			}
+		}
+
 		const messages: Record<number, string> = {
 			2: 'Parameter error or missing parameter (ensure path format is correct)',
 			111: 'Session expired or bdstoken invalid. Please refresh your credentials.',

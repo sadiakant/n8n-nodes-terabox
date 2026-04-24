@@ -91,6 +91,27 @@ Completes the QR code login and returns authentication credentials.
 
 ---
 
+#### Refresh Session Tokens
+
+Refreshes the current session tokens without requiring re-authentication.
+
+**Parameters:** None
+
+**Output:**
+
+- `status` - Refresh status (`refreshed`, `failed`)
+- `baseUrl` - Updated API base URL
+- `sessionStillValid` - Whether session remains valid
+- `cookieHeader` - Updated cookie header
+- `jsToken` - Refreshed JavaScript token
+- `bdstoken` - Refreshed BDS token
+- `tokensChanged` - Object showing which tokens were updated
+- `message` - Human-readable status message
+
+**Use Case:** Keep sessions active during long-running workflows or refresh tokens after TeraBox updates.
+
+---
+
 #### Validate Session
 
 Validates the current session and returns account information.
@@ -182,8 +203,8 @@ Lists files and folders in a directory with advanced filtering options.
 | Category Filter | Options | No | `all` | Filter by file category |
 | List Mode | Options | No | `limit` | How to filter results |
 | List Limit | Number | No | `10000` | Maximum items to return |
-| Last Hours | Number | No | `24` | Items from last N hours |
-| Last Days | Number | No | `7` | Items from last N days |
+| Last Hours | Number | No | `24` | Items from the last N rolling hours |
+| Last Days | Number | No | `7` | Items from today back through the previous N-1 calendar days |
 | From Date | String | No | - | Start date (ISO format) |
 | To Date | String | No | - | End date (ISO format) |
 | Invert Output | Boolean | No | `false` | Return items NOT matching filter |
@@ -202,8 +223,8 @@ Lists files and folders in a directory with advanced filtering options.
 **List Mode Options:**
 
 - `limit` - Return up to N items
-- `lastHours` - Items modified in last N hours
-- `lastDays` - Items modified in last N days
+- `lastHours` - Items modified in the last N rolling hours
+- `lastDays` - Items modified from today back through the previous N-1 calendar days
 - `dateRange` - Items within date range
 
 **Output per item:**

@@ -33,6 +33,13 @@ export const authenticationDescription: INodeProperties[] = [
 				action: 'Complete QR login',
 			},
 			{
+				name: '04. Refresh Session Tokens',
+				value: 'refreshSession',
+				description:
+					'Use the current authenticated session to fetch a fresh cookie header, jsToken, and bdstoken without scanning a new QR code',
+				action: 'Refresh session tokens',
+			},
+			{
 				name: 'Session Diagnostics',
 				value: 'sessionDiagnostics',
 				description:
