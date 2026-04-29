@@ -4,10 +4,12 @@ This guide explains how to authenticate with TeraBox for use with the n8n TeraBo
 
 ## Overview
 
-TeraBox does not expose a standard public developer OAuth flow for regular users. This node uses an authenticated browser session (cookies + jsToken) captured from an authenticated TeraBox web request. There are two primary methods to obtain these credentials:
+TeraBox does not expose a standard public developer OAuth flow for regular users. This node now uses the long-lived `ndusToken` as the primary credential. During QR login, the node derives the required session values automatically from that token.
+
+There are two primary methods to obtain credentials:
 
 1. **QR Code Login** (Recommended) - Use the built-in QR login assistant
-2. **Manual Cookie Extraction** - Copy credentials from your browser's developer tools
+2. **Manual Token Extraction** - Copy the `ndus` cookie from your browser's developer tools
 
 ---
 
@@ -24,7 +26,7 @@ The QR Code Login method is the easiest and most secure way to authenticate. It 
 3. Set **Resource** to `Authentication`
 4. Connect your TeraBox credentials (or leave empty for QR login)
 
-![Node Connection](./assets/QR-Login-Auth/01-Node-Connection.jpg)
+<img src="./assets/QR-Login-Auth/01-Node-Connection.jpg" alt="Node Connection" width="720" style="width: 100%; max-width: 720px; max-height: 480px; height: auto; object-fit: contain;" />
 
 ---
 
@@ -33,9 +35,10 @@ The QR Code Login method is the easiest and most secure way to authenticate. It 
 1. Set **Operation** to `Start QR Login`
 2. Execute the node
 3. The node will return a QR code image (available as binary data)
-4. A `loginStateJson` object containing the session state will be returned
+4. A `loginStateJson` value containing the QR session state will be returned
+5. The output message will ask you to scan the QR code and then run **Check QR Login**
 
-![Execute Start QR Login](./assets/QR-Login-Auth/02-Execute-Start-QR-login.jpg)
+<img src="./assets/QR-Login-Auth/02-Execute-Start-QR-login.jpg" alt="Execute Start QR Login" width="720" style="width: 100%; max-width: 720px; max-height: 480px; height: auto; object-fit: contain;" />
 
 ---
 
@@ -45,7 +48,7 @@ The QR Code Login method is the easiest and most secure way to authenticate. It 
 2. Tap on the **Menu** (three dots or hamburger icon)
 3. Click on **Scan** button from the menu
 
-![Click On Scan Button from Menu](./assets/QR-Login-Auth/03-Click-On-Scan-Button-from-Menu.jpg)
+<img src="./assets/QR-Login-Auth/03-Click-On-Scan-Button-from-Menu.jpg" alt="Click On Scan Button from Menu" width="720" style="width: 100%; max-width: 720px; max-height: 480px; height: auto; object-fit: contain;" />
 
 ---
 
@@ -54,7 +57,7 @@ The QR Code Login method is the easiest and most secure way to authenticate. It 
 1. After scanning, you will see a login confirmation screen
 2. Click on **Login** button on your mobile screen to confirm
 
-![Click on Login on Mobile Screen](./assets/QR-Login-Auth/04-Click-on-login-on-mobile-screen.jpg)
+<img src="./assets/QR-Login-Auth/04-Click-on-login-on-mobile-screen.jpg" alt="Click on Login on Mobile Screen" width="720" style="width: 100%; max-width: 720px; max-height: 480px; height: auto; object-fit: contain;" />
 
 ---
 
@@ -63,7 +66,7 @@ The QR Code Login method is the easiest and most secure way to authenticate. It 
 1. After clicking Login, you will see a success message in the TeraBox app
 2. The message confirms that you have successfully logged in
 
-![Got Login Success Message in TeraBox App](./assets/QR-Login-Auth/05-Got-Login-Success-Message-in-Terabox-App.jpg)
+<img src="./assets/QR-Login-Auth/05-Got-Login-Success-Message-in-Terabox-App.jpg" alt="Got Login Success Message in TeraBox App" width="720" style="width: 100%; max-width: 720px; max-height: 480px; height: auto; object-fit: contain;" />
 
 ---
 
@@ -76,7 +79,15 @@ The QR Code Login method is the easiest and most secure way to authenticate. It 
 5. Pass the `loginStateJson` from the Start QR Login output
 6. Execute the node to verify the scan status
 
-![Execute Check QR Login](./assets/QR-Login-Auth/06-Execute-Check-QR-login.jpg)
+What you will see depends on the current state:
+
+- `pending_scan` - QR code is waiting to be scanned
+- `pending_confirm` - QR code was scanned, but login still needs confirmation in the mobile app
+- `success` - Scan and confirmation are complete
+
+When the QR code is scanned but not yet confirmed, the node can also return the scanned account name/avatar and an updated `loginStateJson`. Make sure you pass this updated `loginStateJson` into the next run.
+
+<img src="./assets/QR-Login-Auth/06-Execute-Check-QR-login.jpg" alt="Execute Check QR Login" width="720" style="width: 100%; max-width: 720px; max-height: 480px; height: auto; object-fit: contain;" />
 
 ---
 
@@ -88,27 +99,27 @@ The QR Code Login method is the easiest and most secure way to authenticate. It 
 4. Pass the `loginStateJson` from the previous node's output
 5. Execute the node
 
-The node will return your authentication credentials:
+If login is fully confirmed, the node will return your final credential payload:
 
-- `cookieHeader` - The full Cookie header string
-- `jsToken` - The JavaScript token
-- `bdstoken` - The BDS token (for file operations)
+- `ndusToken` - The long-lived token you save in the credential
 - `baseUrl` - The API base URL
+- `credential` - A ready-to-copy object containing `ndusToken` and `baseUrl`
+- `accountName` - The detected account name
 
-![Execute Complete QR Login](./assets/QR-Login-Auth/07-Execute-Complate-QR-login.jpg)
+The output message now tells you to copy only the `ndusToken`. The node auto-derives cookies and other session values from it when needed.
+
+<img src="./assets/QR-Login-Auth/07-Execute-Complate-QR-login.jpg" alt="Execute Complete QR Login" width="720" style="width: 100%; max-width: 720px; max-height: 480px; height: auto; object-fit: contain;" />
 
 ---
 
 #### Step 8: Save Credentials
 
 1. Copy the returned credentials from Step 7
-2. Go to **n8n Settings** → **Credentials**
+2. Go to **n8n Settings** -> **Credentials**
 3. Create a new **TeraBox Session API** credential
 4. Enter the values from Step 7:
-   - **Cookie Header**: Paste the `cookieHeader` value
-   - **JS Token**: Paste the `jsToken` value
-   - **BDSToken**: Paste the `bdstoken` value (optional but recommended)
-   - **Base URL**: Use default `https://dm.nephobox.com` or paste the `baseUrl` value
+   - **NDUS Token**: Paste the `ndusToken` value
+   - **Base URL**: Use default `https://dm.nephobox.com` or paste the returned `baseUrl` value
 5. Save the credential
 
 ---
@@ -123,16 +134,16 @@ You can use the **Check QR Login** operation to poll the login status without co
 
 The status will be one of:
 
-- `pending` - QR code not yet scanned
-- `scanned` - User has scanned but not confirmed
+- `pending_scan` - QR code not yet scanned
+- `pending_confirm` - User has scanned but not confirmed on mobile yet
 - `success` - Login completed successfully
 - `expired` - QR code has expired
 
 ---
 
-## Method 2: Manual Cookie Extraction
+## Method 2: Manual Token Extraction
 
-If you prefer to extract credentials manually from your browser, follow these steps:
+If you prefer to extract credentials manually from your browser, follow these steps. In the current auth model, the most important value is the `ndus` cookie because that becomes your **NDUS Token** credential.
 
 ### Step 1: Login to TeraBox
 
@@ -152,33 +163,21 @@ If you prefer to extract credentials manually from your browser, follow these st
 2. Click on a folder or perform any action that triggers an API request
 3. Look for requests to `/api/list`, `/api/check/login`, or similar endpoints
 
-### Step 4: Copy Cookie Header
+### Step 4: Copy NDUS Token
 
 1. Click on one of the API requests
 2. Go to the **Headers** tab
 3. Scroll down to **Request Headers**
 4. Find the `Cookie` header
-5. Copy the entire Cookie value
+5. Copy the value of the `ndus` cookie from that Cookie header
+6. This `ndus` cookie value is your **NDUS Token**
 
-### Step 5: Copy jsToken
+### Step 5: Configure Credentials
 
-1. In the same request, look at the **Query String Parameters** or the request URL
-2. Find the `jsToken` parameter
-3. Copy its value
-
-### Step 6: Copy bdstoken (Optional)
-
-1. Look for the `bdstoken` parameter in the query string
-2. Copy its value if present
-
-### Step 7: Configure Credentials
-
-1. Go to **n8n Settings** → **Credentials**
+1. Go to **n8n Settings** -> **Credentials**
 2. Create a new **TeraBox Session API** credential
 3. Enter the values:
-   - **Cookie Header**: The Cookie value from Step 4
-   - **JS Token**: The jsToken value from Step 5
-   - **BDSToken**: The bdstoken value from Step 6 (optional)
+   - **NDUS Token**: The `ndus` cookie value from Step 4
    - **Base URL**: Use default `https://dm.nephobox.com`
 4. Save the credential
 
@@ -207,8 +206,8 @@ The node will return:
 
 The **Session Diagnostics** operation provides detailed information about your current session:
 
-- Cookie validity status
-- Token expiration information
+- Credential source and validity status
+- Token availability information
 - Session health metrics
 
 This is useful for troubleshooting authentication issues.
@@ -217,23 +216,12 @@ This is useful for troubleshooting authentication issues.
 
 ## Credential Fields Reference
 
-### Cookie Header (Required)
+### NDUS Token (Required)
 
 - **Type**: Password field
-- **Description**: Full Cookie request header from an authenticated TeraBox web request
-- **Example**: `BAIDUID=xxx; BIDUPSID=xxx; PSTM=xxx; ...`
-
-### JS Token (Required)
-
-- **Type**: Password field
-- **Description**: The jsToken query parameter from an authenticated request
-- **Example**: `A21DBF1B7C3F4E5D6A8B9C0D1E2F3A4B`
-
-### BDSToken (Optional)
-
-- **Type**: Password field
-- **Description**: Used by file management and share copy operations
-- **Example**: `1234567890abcdef1234567890abcdef`
+- **Description**: The `ndus` authentication token from a successful QR login or authenticated browser session
+- **Example**: `Vxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+- **Notes**: This is the only required auth token. The node auto-derives cookies, `jsToken`, and `bdstoken` from it.
 
 ### Base URL (Optional)
 
@@ -245,11 +233,11 @@ This is useful for troubleshooting authentication issues.
 
 ## Security Best Practices
 
-1. **Never share your credentials** - Keep your Cookie Header and tokens private
+1. **Never share your credentials** - Keep your NDUS Token private
 2. **Use environment variables** - Store sensitive values in n8n environment variables
 3. **Rotate credentials regularly** - Re-authenticate periodically for security
 4. **Monitor session usage** - Check session diagnostics regularly
-5. **Use QR login when possible** - More secure than manual cookie extraction
+5. **Use QR login when possible** - More secure than manual token extraction
 
 ---
 
@@ -257,18 +245,18 @@ This is useful for troubleshooting authentication issues.
 
 ### Session Expired
 
-- **Cause**: Cookies have expired (typically after 30 days)
-- **Solution**: Re-authenticate using QR login or manual cookie extraction
+- **Cause**: Session token has expired
+- **Solution**: Re-authenticate using QR login or manual token extraction
 
 ### Invalid Credentials
 
-- **Cause**: Incorrect cookie or token values
-- **Solution**: Re-copy credentials carefully, ensuring no extra spaces or characters
+- **Cause**: Incorrect NDUS token value
+- **Solution**: Re-copy the `ndus` value carefully, ensuring no extra spaces or characters
 
 ### Token Mismatch
 
-- **Cause**: Using cookies and tokens from different sessions
-- **Solution**: Ensure all credentials are from the same authenticated session
+- **Cause**: Using an old `ndus` value from an expired or different session
+- **Solution**: Generate a fresh QR login and save the latest `ndusToken`
 
 For more troubleshooting help, see the [Troubleshooting Guide](./TROUBLESHOOTING_GUIDE.md).
 

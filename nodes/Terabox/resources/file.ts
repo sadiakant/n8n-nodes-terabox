@@ -31,6 +31,12 @@ export const fileDescription: INodeProperties[] = [
 				action: 'Download a file',
 			},
 			{
+				name: 'Empty Recycle Bin',
+				value: 'emptyRecycleBin',
+				description: 'Permanently delete all files and folders from the recycle bin',
+				action: 'Empty recycle bin',
+			},
+			{
 				name: 'Get Metadata',
 				value: 'getMetadata',
 				description: 'Get file information',
@@ -399,6 +405,40 @@ export const fileFields: INodeProperties[] = [
 		default: '["/Folder/file.mp4"]',
 		description:
 			'For Delete, provide path strings: ["/path"]. For Copy/Move, provide source paths as strings or objects: ["/src"] or [{"path":"/src"}]. For Rename, provide paths like ["/old/name.ext"] and use New Name field, or objects like [{"path":"/old/name.ext","newname":"new-name.ext"}].',
+	},
+	{
+		displayName: 'Async Mode',
+		name: 'asyncMode',
+		type: 'options',
+		displayOptions: {
+			show: {
+				resource: ['file'],
+				operation: ['delete', 'copy', 'move', 'rename'],
+			},
+		},
+		options: [
+			{
+				name: 'Adaptive',
+				value: 'adaptive',
+				description:
+					'TeraBox decides whether to finish now or create a background task. Best default for most workflows.',
+			},
+			{
+				name: 'Synchronous',
+				value: 'sync',
+				description:
+					'Wait for TeraBox to complete the request before continuing. Useful before checking quota, but can be slower for large batches.',
+			},
+			{
+				name: 'Queued',
+				value: 'queued',
+				description:
+					'Return immediately with a task ID. Fastest for large batches, but following nodes may see old quota or file state.',
+			},
+		],
+		default: 'adaptive',
+		description:
+			'How TeraBox should execute file manager operations. Use Synchronous when the next node needs updated quota immediately.',
 	},
 	{
 		displayName: 'New Name',

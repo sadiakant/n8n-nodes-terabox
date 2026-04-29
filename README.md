@@ -20,7 +20,7 @@ TeraBox is a comprehensive n8n custom node that brings the full power of TeraBox
 #### **Core Operations**
 
 - **Authentication**: QR Code Login, Session Validation, Diagnostics
-- **Files**: List, Search, Download, Upload, Delete, Copy, Move, Rename
+- **Files**: List, Search, Download, Upload, Delete, Empty Recycle Bin, Copy, Move, Rename
 - **User**: Account Info, Storage Quota
 - **Share**: Verify, Query, List, Copy from shared folders
 - **Media**: Stream URLs, Media Metadata for videos and audio
@@ -130,7 +130,7 @@ For detailed documentation of all operations with parameters, examples, and use 
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | **Authentication** | Start QR Login, Check QR Login, Complete QR Login, Refresh Session Tokens, Validate Session, Session Diagnostics |
 | **User**           | Get Info, Get Quota                                                                                              |
-| **File**           | List, Search, Get Metadata, Download, Upload, Delete, Copy, Move, Rename                                         |
+| **File**           | List, Search, Get Metadata, Download, Upload, Delete, Empty Recycle Bin, Copy, Move, Rename                      |
 | **Share**          | Activate, Verify, Query, List, Copy                                                                              |
 | **Media**          | Stream URL, Share Stream URL, Metadata                                                                           |
 

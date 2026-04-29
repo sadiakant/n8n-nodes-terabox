@@ -1,4 +1,4 @@
-import { IDataObject, IExecuteFunctions } from 'n8n-workflow';
+import { IDataObject, IExecuteFunctions, INode, NodeOperationError } from 'n8n-workflow';
 import { getTeraboxSession } from './SessionAuth';
 
 const QR_LOGIN_DEFAULT_PAGE_URL = 'https://www.1024terabox.com/ai/index';
@@ -190,7 +190,7 @@ export async function checkQrLogin(
 	this: IExecuteFunctions,
 	rawState: unknown,
 ): Promise<IDataObject> {
-	const state = parseQrLoginState(rawState);
+	const state = parseQrLoginState(this.getNode(), rawState);
 	const cookieJar: CookieJar = { ...state.cookies };
 	// Use the existing seq for polling; some Baidu implementations require a stable sequence/seed.
 	const currentSeq = state.seq;
@@ -703,7 +703,10 @@ async function httpRequestWithRetry(
 			return await httpRequestWithRetry.call(this, config, attempt + 1);
 		}
 
-		throw error;
+		throw new NodeOperationError(
+			this.getNode(),
+			`QR login HTTP request failed: ${(error as Error).message}`,
+		);
 	}
 }
 
@@ -777,14 +780,14 @@ function parseCookieHeader(cookieHeader: string): CookieJar {
 	return jar;
 }
 
-function parseQrLoginState(rawState: unknown): QrLoginState {
-	const parsed = unwrapSingleItemArray(parseRawQrStateValue(rawState));
+function parseQrLoginState(node: INode, rawState: unknown): QrLoginState {
+	const parsed = unwrapSingleItemArray(node, parseRawQrStateValue(node, rawState));
 
 	if (!parsed || typeof parsed !== 'object') {
-		throw new Error('QR Login State JSON must be an object.');
+		throw new NodeOperationError(node, 'QR Login State JSON must be an object.');
 	}
 
-	const candidate = unwrapQrStateCandidate(parsed);
+	const candidate = unwrapQrStateCandidate(node, parsed);
 	const browserId = normalizeNonEmptyString(candidate.browserId);
 	const loginOrigin = normalizeNonEmptyString(candidate.loginOrigin);
 	const loginPageUrl = normalizeNonEmptyString(candidate.loginPageUrl);
@@ -796,11 +799,14 @@ function parseQrLoginState(rawState: unknown): QrLoginState {
 	const step = normalizeNumber(candidate.step);
 
 	if (!browserId || !loginOrigin || !loginPageUrl || !pcfToken || !regSource || !uuid) {
-		throw new Error('QR Login State JSON is missing required QR login fields.');
+		throw new NodeOperationError(node, 'QR Login State JSON is missing required QR login fields.');
 	}
 
 	if (seq === undefined || step === undefined) {
-		throw new Error('QR Login State JSON must include numeric seq and step values.');
+		throw new NodeOperationError(
+			node,
+			'QR Login State JSON must include numeric seq and step values.',
+		);
 	}
 
 	return {
@@ -821,24 +827,24 @@ function parseQrLoginState(rawState: unknown): QrLoginState {
 	};
 }
 
-function parseRawQrStateValue(rawState: unknown): unknown {
+function parseRawQrStateValue(node: INode, rawState: unknown): unknown {
 	if (typeof rawState === 'string') {
 		const normalized = rawState.trim();
 		if (!normalized) {
-			throw new Error('QR Login State JSON is required.');
+			throw new NodeOperationError(node, 'QR Login State JSON is required.');
 		}
 
 		try {
 			return JSON.parse(normalized);
 		} catch {
-			throw new Error('QR Login State JSON is not valid JSON.');
+			throw new NodeOperationError(node, 'QR Login State JSON is not valid JSON.');
 		}
 	}
 
 	return rawState;
 }
 
-function unwrapQrStateCandidate(value: object): Partial<QrLoginState> {
+function unwrapQrStateCandidate(node: INode, value: object): Partial<QrLoginState> {
 	const candidate = value as {
 		loginState?: unknown;
 		loginStateJson?: unknown;
@@ -849,7 +855,7 @@ function unwrapQrStateCandidate(value: object): Partial<QrLoginState> {
 	}
 
 	if (typeof candidate.loginStateJson === 'string') {
-		const nestedParsed = parseRawQrStateValue(candidate.loginStateJson);
+		const nestedParsed = parseRawQrStateValue(node, candidate.loginStateJson);
 		if (nestedParsed && typeof nestedParsed === 'object') {
 			return nestedParsed as Partial<QrLoginState>;
 		}
@@ -858,13 +864,13 @@ function unwrapQrStateCandidate(value: object): Partial<QrLoginState> {
 	return value as Partial<QrLoginState>;
 }
 
-function unwrapSingleItemArray(value: unknown): unknown {
+function unwrapSingleItemArray(node: INode, value: unknown): unknown {
 	if (!Array.isArray(value)) {
 		return value;
 	}
 
 	if (value.length === 0) {
-		throw new Error('QR Login State JSON array is empty.');
+		throw new NodeOperationError(node, 'QR Login State JSON array is empty.');
 	}
 
 	return value[0];
@@ -904,7 +910,10 @@ async function postQrApi<T>(
 	try {
 		parsedResponse = JSON.parse(response.bodyText);
 	} catch {
-		throw new Error(`QR login API returned invalid JSON from ${options.pathname}.`);
+		throw new NodeOperationError(
+			this.getNode(),
+			`QR login API returned invalid JSON from ${options.pathname}.`,
+		);
 	}
 
 	if (!parsedResponse || typeof parsedResponse !== 'object') {

@@ -347,6 +347,17 @@ Deletes one or more files or folders.
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | File List | JSON/String | Yes | - | Array of file paths to delete |
+| Async Mode | Options | No | Adaptive | How TeraBox should execute the delete request |
+
+**Async Mode:**
+
+| Mode | API Value | Behavior | Use When |
+|------|-----------|----------|----------|
+| Synchronous | `0` | TeraBox tries to complete the operation before the node continues | The next node needs updated quota or file state immediately |
+| Adaptive | `1` | TeraBox decides whether to complete now or create a background task | Recommended default for most workflows |
+| Queued | `2` | TeraBox returns immediately with a task ID | Large batches where speed matters and following nodes can wait or poll later |
+
+If a delete response contains a task ID, the request has only been accepted by TeraBox. Quota can still show the old value until the background task and TeraBox quota recalculation finish.
 
 **File List Format:**
 
@@ -361,6 +372,24 @@ Deletes one or more files or folders.
 - Number of items processed
 
 **API Endpoint:** `POST /api/filemanager` with `opera=delete`
+
+---
+
+#### Empty Recycle Bin
+
+Permanently deletes all files and folders currently in the TeraBox recycle bin.
+
+**Parameters:** None
+
+**Output:**
+
+- Operation result
+- Task ID (for async operations)
+- Deleted recycle bin item count
+- Deleted recycle bin item details
+- Operation status
+
+**API Endpoints:** `GET /api/recycle/list`, then `GET /api/recycle/clear` with `async=1`
 
 ---
 

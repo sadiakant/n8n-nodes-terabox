@@ -290,6 +290,7 @@ async function uploadChunksWithFallback(
 						buffer: chunk.buffer,
 						mimeType: params.mimeType || 'application/octet-stream',
 						fileName: params.fileName || extractFileNameFromPath(params.normalizedPath),
+						itemIndex,
 					});
 
 					if (typeof response.error_code === 'number' && response.error_code !== 0) {
@@ -649,6 +650,7 @@ async function postUploadChunk(
 		buffer: Buffer;
 		mimeType: string;
 		fileName: string;
+		itemIndex: number;
 	},
 ): Promise<IDataObject> {
 	const boundary = `----n8nTerabox${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
@@ -680,16 +682,20 @@ async function postUploadChunk(
 	});
 
 	if (response.statusCode !== 200) {
-		throw new Error(
+		throw new NodeOperationError(
+			this.getNode(),
 			`Request failed with status code ${response.statusCode}${response.bodyText ? `: ${response.bodyText}` : ''}`,
+			{ itemIndex: params.itemIndex },
 		);
 	}
 
 	try {
 		return JSON.parse(response.bodyText) as IDataObject;
 	} catch (error) {
-		throw new Error(
+		throw new NodeOperationError(
+			this.getNode(),
 			`Upload response was not valid JSON: ${getErrorMessage(error)}${response.bodyText ? ` | ${response.bodyText}` : ''}`,
+			{ itemIndex: params.itemIndex },
 		);
 	}
 }
@@ -752,6 +758,9 @@ async function sendHttpsRequest(
 						: JSON.stringify(candidate.response.body || {}),
 			};
 		}
-		throw error;
+		throw new NodeOperationError(
+			this.getNode(),
+			`TeraBox upload request failed: ${getErrorMessage(error)}`,
+		);
 	}
 }

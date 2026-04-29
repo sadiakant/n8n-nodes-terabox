@@ -503,6 +503,26 @@ export class Terabox implements INodeType {
 							json: buildOperationOutput(resource, operation, responseData),
 							pairedItem: { item: i },
 						});
+					} else if (operation === 'emptyRecycleBin') {
+						const recycleBinItems = await getRecycleBinItems.call(this);
+
+						const responseData = await teraboxApiRequest.call(
+							this,
+							'GET',
+							'/api/recycle/clear',
+							{},
+							{ async: 1 },
+						);
+
+						returnData.push({
+							json: buildOperationOutput(
+								resource,
+								operation,
+								addEmptyRecycleBinOutputDetails(responseData, recycleBinItems),
+								getEmptyRecycleBinOperationSummary(responseData, recycleBinItems.length),
+							),
+							pairedItem: { item: i },
+						});
 					} else if (['delete', 'copy', 'move', 'rename'].includes(operation)) {
 						let filelistJson = '';
 						let renameEntries: Array<{ path: string; newname: string }> = [];
@@ -608,6 +628,9 @@ export class Terabox implements INodeType {
 							filelistJson = JSON.stringify(objList);
 						}
 
+						const asyncMode = this.getNodeParameter('asyncMode', i, 'adaptive') as string;
+						const fileManagerAsyncValue = getFileManagerAsyncValue(asyncMode);
+
 						let session = await getTeraboxSession.call(this);
 						if (!session.bdstoken) {
 							throw new NodeOperationError(
@@ -624,7 +647,7 @@ export class Terabox implements INodeType {
 							const webOrigin = deriveTeraboxOrigin(fmSession.baseUrl);
 							const fmQs: IDataObject = {
 								app_id: '250528',
-								async: 2,
+								async: fileManagerAsyncValue,
 								bdstoken: fmSession.bdstoken,
 								channel: 'dubox',
 								clienttype: 0,
@@ -677,6 +700,12 @@ export class Terabox implements INodeType {
 								{ itemIndex: i },
 							);
 						}
+
+						responseData = {
+							...responseData,
+							fileManagerAsyncMode: asyncMode,
+							fileManagerAsyncValue,
+						};
 
 						const outputData =
 							operation === 'rename'
@@ -1048,8 +1077,10 @@ export class Terabox implements INodeType {
 						},
 						pairedItem: { item: i },
 					});
-				} else if (error instanceof NodeApiError || error instanceof NodeOperationError) {
-					throw error;
+				} else if (error instanceof NodeApiError) {
+					throw new NodeApiError(this.getNode(), error as unknown as JsonObject, { itemIndex: i });
+				} else if (error instanceof NodeOperationError) {
+					throw new NodeOperationError(this.getNode(), error, { itemIndex: i });
 				} else {
 					throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });
 				}
@@ -1247,6 +1278,64 @@ function getFileManagerOperationSummary(operation: string, responseData: IDataOb
 	return `${toSentenceCase(operation)} request completed successfully.`;
 }
 
+function getFileManagerAsyncValue(asyncMode: string): number {
+	if (asyncMode === 'sync') {
+		return 0;
+	}
+
+	if (asyncMode === 'queued') {
+		return 2;
+	}
+
+	return 1;
+}
+
+async function getRecycleBinItems(this: IExecuteFunctions): Promise<IDataObject[]> {
+	const pageSize = 20000;
+	const items: IDataObject[] = [];
+
+	for (let page = 1; page <= 1000; page++) {
+		const responseData = await teraboxApiRequest.call(
+			this,
+			'GET',
+			'/api/recycle/list',
+			{},
+			{
+				desc: 0,
+				num: pageSize,
+				page,
+			},
+		);
+		const pageEntries = extractTeraboxEntries(responseData) ?? [];
+		items.push(
+			...pageEntries
+				.filter((entry): entry is IDataObject => Boolean(entry) && typeof entry === 'object')
+				.map((entry) => entry as IDataObject),
+		);
+
+		const hasMore = responseData.has_more === 1 || responseData.has_more === true;
+		if (!hasMore || pageEntries.length === 0 || pageEntries.length < pageSize) {
+			break;
+		}
+	}
+
+	return items;
+}
+
+function getEmptyRecycleBinOperationSummary(
+	responseData: IDataObject,
+	deletedItemCount = 0,
+): string {
+	const taskId = normalizeString(responseData.taskid ?? responseData.taskId);
+	const itemText = `${deletedItemCount} item${deletedItemCount === 1 ? '' : 's'}`;
+
+	if (taskId) {
+		return `Empty recycle bin request accepted for ${itemText}. Task ID ${taskId} has been created.`;
+	}
+
+	return `Empty recycle bin request completed successfully for ${itemText}.`;
+}
+
 function getFileManagerErrorMessage(responseData: IDataObject, baseUrl: string): string {
 	const rawMessage =
 		(typeof responseData.show_msg === 'string' && responseData.show_msg) ||
@@ -1320,6 +1409,57 @@ function addDeleteOutputDetails(
 	};
 }
 
+function addEmptyRecycleBinOutputDetails(
+	responseData: IDataObject,
+	recycleBinItems: IDataObject[],
+): IDataObject {
+	const items = recycleBinItems.map((item) => {
+		const formattedItem = formatTeraboxListEntry(item);
+		const path = getRecycleBinItemPath(formattedItem);
+		const name = getRecycleBinItemName(formattedItem, path);
+		const isDirectory = normalizeNumber(formattedItem.isdir) === 1;
+
+		return {
+			...formattedItem,
+			path,
+			name,
+			type: isDirectory ? 'folder' : 'file',
+			isDirectory,
+		};
+	});
+	const paths = items
+		.map((item) => item.path)
+		.filter((path): path is string => typeof path === 'string' && path.trim() !== '');
+
+	return {
+		...responseData,
+		emptiedRecycleBin: {
+			count: items.length,
+			paths,
+			items,
+			summary: `Permanently deleted ${items.length} recycle bin item${items.length === 1 ? '' : 's'}`,
+		},
+	};
+}
+
+function getRecycleBinItemPath(item: IDataObject): string {
+	return (
+		normalizeString(item.path) ??
+		normalizeString(item.server_path) ??
+		normalizeString(item.source_path) ??
+		''
+	);
+}
+
+function getRecycleBinItemName(item: IDataObject, path: string): string {
+	return (
+		normalizeString(item.server_filename) ??
+		normalizeString(item.filename) ??
+		normalizeString(item.name) ??
+		extractNameFromPath(path)
+	);
+}
+
 function extractNameFromPath(path: string): string {
 	const parts = path
 		.split('/')
@@ -1366,6 +1506,11 @@ function extractItemCount(responseData: IDataObject): number | undefined {
 	const list = responseData.list;
 	if (Array.isArray(list)) {
 		return list.length;
+	}
+
+	const emptiedRecycleBin = responseData.emptiedRecycleBin;
+	if (emptiedRecycleBin && typeof emptiedRecycleBin === 'object') {
+		return normalizeNumber((emptiedRecycleBin as IDataObject).count);
 	}
 
 	return undefined;

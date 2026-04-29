@@ -5,6 +5,8 @@ import {
 	IHttpRequestMethods,
 	IHttpRequestOptions,
 	ILoadOptionsFunctions,
+	JsonObject,
+	NodeApiError,
 } from 'n8n-workflow';
 import {
 	buildTeraboxHeaders,
@@ -167,6 +169,8 @@ export async function teraboxRequest(
 	try {
 		return (await this.helpers.httpRequest(requestOptions)) as TeraboxRawResponse;
 	} catch (error) {
-		throw new Error(`TeraBox request failed: ${(error as Error).message}`);
+		throw new NodeApiError(this.getNode(), error as JsonObject, {
+			message: `TeraBox request failed: ${(error as Error).message}`,
+		});
 	}
 }

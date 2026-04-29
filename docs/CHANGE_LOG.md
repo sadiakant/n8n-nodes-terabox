@@ -1,6 +1,50 @@
 # Changelog
 
-## Version 0.1.3 - Advanced File Management & Session Intelligence 🚀
+## Version 0.1.4 - Recycle Bin Control & Clearer Errors [29-APR-2026]🚀
+
+### 🌟 New Features
+
+- **Empty Recycle Bin Operation** 🗑️
+  - Added a new file operation to permanently clear all files and folders from the recycle bin
+  - Returns deleted item count, paths, and item details for easier tracking
+
+- **Async Mode for File Manager Actions** ⚡
+  - Added `Adaptive`, `Synchronous`, and `Queued` modes for Delete, Copy, Move, and Rename
+  - Helps workflows choose between immediate completion and faster background task handling
+
+### 🔧 Patches & Improvements
+
+- **Better Operation Output** 📋
+  - Empty recycle bin now shows a clearer summary and task ID when TeraBox runs it in background
+  - File manager responses now include async execution details for easier debugging
+
+- **Improved Error Handling** 🛡️
+  - QR login errors now return clearer node-level messages instead of generic failures
+  - Upload, session, and API request errors now point more cleanly to the item that failed
+  - Node operation errors now keep item index context more reliably in n8n
+
+### 🐛 Bugs Fixed
+
+- **QR Login State Validation** ✅
+  - Fixed confusing failures when QR login state JSON was empty, invalid, or missing required fields
+
+- **Upload Request Failure Reporting** 📤
+  - Fixed cases where upload chunk failures returned less useful error messages
+
+- **Session Request Wrapping** 🔐
+  - Fixed session/auth request failures so they surface as proper n8n operation errors
+
+### 📚 Documentation & Updates
+
+- **Docs Refreshed** 📝
+  - Updated README and operations docs to include Empty Recycle Bin and Async Mode behavior
+  - Authorization guide now explains the NDUS token based login flow more clearly
+
+- **Release Update** 📦
+  - Package version updated to `0.1.4`
+  - `release-it` dependency updated for the release workflow
+
+## Version 0.1.3 - Advanced File Management & Session Intelligence [25-APR-2026]🚀
 
 ### 🌟 Major New Features
 
@@ -84,4 +128,3 @@
 ---
 
 **Share this update:** Exciting news! 🎉 n8n-nodes-terabox v0.1.3 brings QR Code Login, auto-refresh sessions, and enhanced file management for seamless TeraBox automation. No more manual auth headaches! #n8n #TeraBox #Automation</content>
-

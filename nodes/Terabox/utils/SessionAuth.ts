@@ -4,6 +4,7 @@ import {
 	IExecuteFunctions,
 	IHookFunctions,
 	ILoadOptionsFunctions,
+	NodeOperationError,
 } from 'n8n-workflow';
 
 type TeraboxContext = IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions;
@@ -245,7 +246,7 @@ export async function getTeraboxSession(this: TeraboxContext): Promise<TeraboxSe
 		return await sessionPromise;
 	} catch (error) {
 		sessionCache.delete(cacheKey);
-		throw error;
+		throw new NodeOperationError(this.getNode(), error as Error);
 	}
 }
 
